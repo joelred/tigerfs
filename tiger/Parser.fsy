@@ -1,0 +1,32 @@
+﻿%{
+open Absyn
+open SymbolNS
+%}
+
+// The start token becomes a parser function in the compiled code:
+%start start
+
+// Regular tokens
+%token <SymbolNS.Symbol> ID
+%token <string> STRING
+%token <int> INT
+%token VAR NIL FUNCTION LET IN END OF IF THEN ELSE WHILE DO FOR TO BREAK
+%token LPAREN RPAREN LBRACE RBRACE LBRACK RBRACK DOT SEMI COLON COMMA
+%token PLUS MINUS MUL DIV EQ NEQ GT GE LT LE AND OR ASSIGN
+
+// Misc tokens
+%token EOF
+
+// This is the type of the data produced by a successful reduction of the 'start'
+// symbol:
+%type < int > start
+
+%%
+
+// These are the rules of the grammar along with the F# code of the 
+// actions executed as rules are reduced.  
+start: File EOF { $1 }
+
+File:
+	| INT						{ 1 }
+	
