@@ -42,7 +42,7 @@ and OpExpType = {
     }
 and RecordExpType = {
     Fields: (Symbol * Exp * Position) list;
-    Type: Symbol;
+    Typ: Symbol;
     Position: Position
     }    
 and AssignExpType = {
@@ -75,7 +75,7 @@ and LetExpType = {
     Position: Position
     }
 and ArrayExpType = {
-    Type: Symbol;
+    Typ: Symbol;
     Size: Exp;
     Init: Exp;
     Position: Position

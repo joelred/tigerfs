@@ -13,8 +13,8 @@ let print (exp:Exp) =
         match op with
         | PlusOp -> "PlusOp"
         | MinusOp -> "MinusOp"
-        | MulOp -> "MulOp"
-        | DivOp -> "DivOp"
+        | TimesOp -> "TimesOp"
+        | DivideOp -> "DivideOp"
         | EqOp -> "EqOp"
         | NeqOp -> "NeqOp"
         | LtOp -> "LtOp"
@@ -65,14 +65,11 @@ let print (exp:Exp) =
             indent depth; printfn "OpExp(%s," (operatorName exp.Operator)
             printExp exp.Left (depth+1); printfn ","
             printExp exp.Right (depth+1); printf ")"
-        | NegExp (exp,_) ->
-            indent depth; printfn "NegExp(";
-            printExp exp depth; printf ")"
         | RecordExp exp ->
             let f (name : Symbol, exp, pos) depth =
                 indent depth; printfn "%s" name.Name; 
                 printExp exp (depth+1); printf ")"
-            indent depth; printfn "RecordExp(%s,[" exp.Type.Name
+            indent depth; printfn "RecordExp(%s,[" exp.Typ.Name
             doList depth f exp.Fields; printf "])"
         | SeqExp list' ->
             indent depth; printf "SeqExp["; doList depth printExp (List.map fst list'); printf "]"
@@ -105,7 +102,7 @@ let print (exp:Exp) =
             doList depth printDec exp.Decs; printfn "],"
             printExp exp.Body (depth+1); printf ")"
         | ArrayExp exp ->
-            indent depth; printfn "ArrayExp(%s," exp.Type.Name
+            indent depth; printfn "ArrayExp(%s," exp.Typ.Name
             printExp exp.Size (depth+1); printfn ","
             printExp exp.Init (depth+1); printf ")"
    

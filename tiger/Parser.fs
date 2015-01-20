@@ -8,19 +8,6 @@ open FParsec.CharParsers
 type UserState = unit
 type Parser<'t> = Parser<'t,UserState>
 
-let mutable trace = true;
-
-// Trace parser
-let (<!>) (p: Parser<_,_>) label : Parser<_,_> =
-    fun stream ->
-        if trace then    
-            printfn "%A: Entering %s" stream.Position label
-            let reply = p stream
-            printfn "%A: Leaving %s (%A)" stream.Position label reply.Status
-            reply
-        else
-            p stream
-
 // Comments
 let commentLine : Parser<_> = 
     skipString "//" >>. skipRestOfLine true
@@ -215,8 +202,8 @@ let lvalue =
     do restImpl :=
         choice 
             [   
-                pipe2 restField (opt rest) prepend      <!> "lvalue.restField"                  
-                pipe2 restSubscript (opt rest) prepend  <!> "lvalue.restSubscript"
+                pipe2 restField (opt rest) prepend                   
+                pipe2 restSubscript (opt rest) prepend
             ]
     
     let rec buildVar var rest =
@@ -290,7 +277,7 @@ let opExpr =
         let op = InfixOperator("|", getPosition .>> ws, prec, assoc, (), ifExp)
         opp.AddOperator(op)
 
-    opp.TermParser <- expr <!> "opp.term" 
+    opp.TermParser <- expr <|> between (str "(") (str ")") expr    
 
     addUMinus 12 true
     addInfixOperator "*"  MulOp 10 (Associativity.Left) 
@@ -309,63 +296,15 @@ let opExpr =
 
     opp.ExpressionParser
 
-let recordCreationExpr =
-    let fieldInit = 
-        pipe3 ident (str "=" >>. getPosition) expr
-            (fun field pos init ->
-                (field, init, (position pos) ))
-
-    let initList = between 
-                    (str "{")
-                    (str "}")
-                    (sepBy fieldInit (str ","))
-
-    pipe3 ident initList getPosition
-        (fun type' initList pos -> 
-            { Fields = initList;
-              Type = type';
-              Position = position pos})
-
-let arrayCreationExpr =
-    pipe4 ident getPosition (between (str "[") (str "]") expr) (keyword "of" >>. expr)
-        (fun type' pos size init ->
-            { Type = type';
-              Size = size;
-              Init = init;
-              Position = position pos; })
-
-let assignExpr =
-    pipe3 lvalue ((str ":=") >>. getPosition) expr
-        (fun lval pos exp ->
-            { Var = lval;
-              Exp = exp;
-              Position = position pos})
-
-let seqExpr =
-    let exprPos = pipe2 expr getPosition (fun exp pos -> (exp, position pos))
-    
-    between (str "(") (str ")") (sepBy exprPos (str ";")) |>>
-        fun lst -> 
-            match lst with
-            | [(exp,pos)] -> exp
-            | rest -> SeqExp rest
-
-let breakExpr =
-    keyword "break" >>. getPosition |>> fun pos -> (position pos)
-
 do exprImp := 
-    choice [ 
-        attempt seqExpr                          <!> "sequence";
-        keyword "nil" |>> (fun a -> NilExp)      <!> "nil";
-        breakExpr |>> BreakExp                   <!> "break";
-        attempt lvalue |>> VarExp                <!> "lvalue";
-        attempt number |>> IntExp                <!> "numLit";
-        attempt strExpr |>> StringExp            <!> "StringLit";
-        attempt callExpr |>> CallExp             <!> "CallExp";
-        attempt opExpr                           <!> "Operator";
-        attempt recordCreationExpr |>> RecordExp <!> "RecordExp";
-        attempt arrayCreationExpr |>> ArrayExp   <!> "ArrayExp";
-        attempt assignExpr |>> AssignExp         <!> "AssignExp";
+    choice [
+        lvalue |>> VarExp;
+        keyword "nil" |>> (fun a -> NilExp)
+        number |>> IntExp;
+        strExpr |>> StringExp;
+        callExpr |>> CallExp;
+        opExpr
+
     ] .>> ws
 
 let prog = expr .>> eof
