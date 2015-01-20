@@ -5,13 +5,6 @@ VisualStudioVersion = 12.0.31101.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "tiger", "tiger\tiger.fsproj", "{979CAB94-2DDE-44F7-9D84-278D26DFC9B2}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{6B5F3723-9CB9-4D2D-84A2-8DBCC20CE6FC}"
-	ProjectSection(SolutionItems) = preProject
-		.nuget\packages.config = .nuget\packages.config
-	EndProjectSection
-EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "tiger.test", "tiger.test\tiger.test.fsproj", "{28118564-98CF-4FFD-9856-8B430529D780}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -22,10 +15,6 @@ Global
 		{979CAB94-2DDE-44F7-9D84-278D26DFC9B2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{979CAB94-2DDE-44F7-9D84-278D26DFC9B2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{979CAB94-2DDE-44F7-9D84-278D26DFC9B2}.Release|Any CPU.Build.0 = Release|Any CPU
-		{28118564-98CF-4FFD-9856-8B430529D780}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{28118564-98CF-4FFD-9856-8B430529D780}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{28118564-98CF-4FFD-9856-8B430529D780}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{28118564-98CF-4FFD-9856-8B430529D780}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

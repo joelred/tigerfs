@@ -3,7 +3,7 @@
 open SymbolNS
 
 /// Position within the file
-type Position = int64*int64
+type Position = int
 
 /// Abstract variable usage
 type Var =
@@ -14,8 +14,7 @@ type Var =
 and Exp =
     | VarExp of Var
     | NilExp
-    | IntExp of int64
-    | NegExp of Exp * Position
+    | IntExp of int
     | StringExp of string * Position
     | CallExp of CallExpType
     | OpExp of OpExpType
@@ -97,7 +96,7 @@ and FunctionDecType = {
 and VarDecType= {
     Name: Symbol;
     mutable Escape: bool;
-    Type: (Symbol * Position) option;
+    Typ: (Symbol * Position) option;
     Init: Exp;
     Position: Position
     }
@@ -118,7 +117,6 @@ and Field = {
     Position: Position
     }
 and Operator = 
-    | MulOp | DivOp
-    | PlusOp | MinusOp 
+    | PlusOp | MinusOp | TimesOp | DivideOp
     | EqOp | NeqOp | LtOp | LeOp | GtOp | GeOp
 
