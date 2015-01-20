@@ -121,7 +121,7 @@ let print (exp:Exp) =
             indent depth; printf "FunctionDec["; doList depth printFunctionDec list'; printf "]"
         | VarDec dec ->
             indent depth; printf "VarDec(%s, %b," dec.Name.Name dec.Escape
-            match dec.Typ with
+            match dec.Type with
             | None -> printfn "NONE,"
             | Some (s,_) -> printfn "SOME(%s)," s.Name
             printExp dec.Init (depth+1); printf ")"
