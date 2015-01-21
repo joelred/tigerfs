@@ -41,7 +41,7 @@ and OpExpType = {
     }
 and RecordExpType = {
     Fields: (Symbol * Exp * Position) list;
-    Type: Symbol;
+    Typ: Symbol;
     Position: Position
     }    
 and AssignExpType = {
@@ -74,7 +74,7 @@ and LetExpType = {
     Position: Position
     }
 and ArrayExpType = {
-    Type: Symbol;
+    Typ: Symbol;
     Size: Exp;
     Init: Exp;
     Position: Position
@@ -96,7 +96,7 @@ and FunctionDecType = {
 and VarDecType= {
     Name: Symbol;
     mutable Escape: bool;
-    Type: (Symbol * Position) option;
+    Typ: (Symbol * Position) option;
     Init: Exp;
     Position: Position
     }

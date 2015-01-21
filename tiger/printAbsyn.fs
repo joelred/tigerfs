@@ -38,11 +38,11 @@ let print (exp:Exp) =
     let rec printVar v depth =
         match v with
         | SimpleVar (symbol, pos) ->
-            indent depth; printf "SimpleVar(%s)" symbol.String
+            indent depth; printf "SimpleVar(%s)" symbol.Name
         | FieldVar (var, symbol, pos) ->
             indent depth; printfn "FieldVar("
             printVar var (depth+1)
-            indent (depth+1); printf "%s)" symbol.String
+            indent (depth+1); printf "%s)" symbol.Name
         | SubscriptVar (var, exp, pos) ->
             indent depth; printfn "SubscriptVar("
             printVar var (depth+1); printfn ","
@@ -60,16 +60,16 @@ let print (exp:Exp) =
         | StringExp (value,pos) ->
             indent depth; printf "StringExp(\"%s\")" value
         | CallExp c ->
-            indent depth; printf "CallExp(%s, [" c.Func.String; doList depth printExp c.Args; printf "])"
+            indent depth; printf "CallExp(%s, [" c.Func.Name; doList depth printExp c.Args; printf "])"
         | OpExp exp ->
             indent depth; printfn "OpExp(%s," (operatorName exp.Operator)
             printExp exp.Left (depth+1); printfn ","
             printExp exp.Right (depth+1); printf ")"
         | RecordExp exp ->
             let f (name : Symbol, exp, pos) depth =
-                indent depth; printfn "%s" name.String; 
+                indent depth; printfn "%s" name.Name; 
                 printExp exp (depth+1); printf ")"
-            indent depth; printfn "RecordExp(%s,[" exp.Type.String
+            indent depth; printfn "RecordExp(%s,[" exp.Typ.Name
             doList depth f exp.Fields; printf "])"
         | SeqExp list' ->
             indent depth; printf "SeqExp["; doList depth printExp (List.map fst list'); printf "]"
@@ -91,7 +91,7 @@ let print (exp:Exp) =
             printExp exp.Body (depth+1); printf ")"
         | ForExp exp ->
             indent depth; printfn "ForExp("
-            printfn "%s, %b," exp.Var.String exp.Escape
+            printfn "%s, %b," exp.Var.Name exp.Escape
             printExp exp.Low (depth+1); printfn ","
             printExp exp.High (depth+1); printfn ","
             printExp exp.Body (depth+1); printf ")"
@@ -102,7 +102,7 @@ let print (exp:Exp) =
             doList depth printDec exp.Decs; printfn "],"
             printExp exp.Body (depth+1); printf ")"
         | ArrayExp exp ->
-            indent depth; printfn "ArrayExp(%s," exp.Type.String
+            indent depth; printfn "ArrayExp(%s," exp.Typ.Name
             printExp exp.Size (depth+1); printfn ","
             printExp exp.Init (depth+1); printf ")"
    
@@ -110,36 +110,36 @@ let print (exp:Exp) =
         match dec with
         | FunctionDec list' ->
             let printField field depth =
-                indent depth; printf "(%s, %b, %s)" field.Name.String field.Escape field.Type.String
+                indent depth; printf "(%s, %b, %s)" field.Name.Name field.Escape field.Type.Name
             let printFunctionDec (functionDec:FunctionDecType) depth =
-                indent depth; printf "(%s,[" functionDec.Name.String
+                indent depth; printf "(%s,[" functionDec.Name.Name
                 doList depth printField functionDec.Params; printfn "],"
                 match functionDec.Result with 
                 | None -> printfn "NONE"
-                | Some (s,_) -> printfn "SOME(%s)" s.String
+                | Some (s,_) -> printfn "SOME(%s)" s.Name
                 printExp functionDec.Body (depth+1)
             indent depth; printf "FunctionDec["; doList depth printFunctionDec list'; printf "]"
         | VarDec dec ->
-            indent depth; printf "VarDec(%s, %b," dec.Name.String dec.Escape
-            match dec.Type with
+            indent depth; printf "VarDec(%s, %b," dec.Name.Name dec.Escape
+            match dec.Typ with
             | None -> printfn "NONE,"
-            | Some (s,_) -> printfn "SOME(%s)," s.String
+            | Some (s,_) -> printfn "SOME(%s)," s.Name
             printExp dec.Init (depth+1); printf ")"
         | TypeDec decList ->
             let printDec (dec : TypeDecType) depth =
-                indent depth; printfn "(%s," dec.Name.String
+                indent depth; printfn "(%s," dec.Name.Name
                 printType dec.Type (depth+1); printf ")"
             indent depth; printf "TypeDec["; doList depth printDec decList; printf "]"
     and printType type' depth =
         match type' with
         | NameType (s,_) -> 
-            indent depth; printf "NameType(%s)" s.String
+            indent depth; printf "NameType(%s)" s.Name
         | RecordType list' ->
             let printField field depth =
-                indent depth; printf "(%s, %b, %s)" field.Name.String field.Escape field.Type.String
+                indent depth; printf "(%s, %b, %s)" field.Name.Name field.Escape field.Type.Name
             indent depth; printf "RecordType["; doList depth printField list'; printf "]"
         | ArrayType (s,_) ->
-            indent depth; printf "ArrayType(%s)" s.String
+            indent depth; printf "ArrayType(%s)" s.Name
 
     printExp exp 0; printfn ""
         

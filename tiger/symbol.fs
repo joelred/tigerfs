@@ -17,5 +17,5 @@ type Symbol( name: string, code: int ) =
             dictionary <- Map.add name sym dictionary
             sym
 
-     member this.String = name
+     member this.Name = name
 
