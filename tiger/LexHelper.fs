@@ -30,9 +30,11 @@ let lexeme lexbuf =
 let ident lexbuf =
     let id = lexeme lexbuf
         
-    match Map.tryFind id idsMap with
-    | Some id -> id
-    | None -> Parser.ID (Symbol.Symbol id)
+    if Map.containsKey id idsMap 
+        then Map.find id idsMap
+        else Parser.ID
+             <| Symbol.Symbol (id)
+   
 
 let createString lst =
     lst |> List.rev |> String.concat ""
