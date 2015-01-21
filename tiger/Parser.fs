@@ -14,7 +14,7 @@ let (<!>) (p: Parser<_,_>) label : Parser<_,_> =
         if trace then    
             printfn "%A: Entering %s" stream.Position label
             let reply = p stream
-            printfn "%A: Leaving %s (%A)" stream.Position label reply.Status
+            printfn "%A: Leaving %s (%A %A)" stream.Position label reply.Status reply.Result
             reply
         else
             p stream
@@ -51,7 +51,7 @@ let reservedWords =
         "let"; "in"; "end"; "if"; "then"; "else"; "while";
         "do"; "for"; "to"; "break"]
 // An ident is [A-Z|a-z][A-Z|a-z|0-9|_]+
-let ident : Parser<Symbol, _> =      
+let identParser : Parser<Symbol, _> =      
     let isIdentifierChar c = isLetter c || isDigit c || c = '_'
   
     let identifierString = 
@@ -71,8 +71,10 @@ let ident : Parser<Symbol, _> =
             stream.BacktrackTo(state)
             Reply(Error, expectedIdentifier)
 
+let ident = identParser <!> "ident"
+
 // Primitives
-let number = pint64 .>> ws 
+let number = (pint64 .>> ws) <!> "number"
  
 let stringLit =
     let escape = anyOf "\"\\/bfnrt"
@@ -96,10 +98,14 @@ let stringLit =
     let escapedCharSnippet = str "\\" >>. (escape <|> unicodeEscape)
     let normalCharSnippet  = manySatisfy (fun c -> c <> '"' && c <> '\\')
 
-    between (str "\"") (str "\"")
-            (stringsSepBy normalCharSnippet escapedCharSnippet) .>> ws
+    let p = between (str "\"") (str "\"")
+               (stringsSepBy normalCharSnippet escapedCharSnippet) .>> ws
 
-let keyword s = attempt (pstring s .>> notFollowedBy letter .>> notFollowedBy digit) .>> ws
+    p <!> "stringLit"
+
+let keyword s = 
+    let p = attempt (pstring s .>> notFollowedBy letter .>> notFollowedBy digit)
+    (p >>. ws) <!> "keyword " + s
 
 // forward declaration of expressions
 let expr, exprImp = createParserForwardedToRef()
@@ -154,7 +160,7 @@ let typeDec  =
 // Variable declarations
 let varDec =
     let resultType =
-         pipe2 (str ":" >>. ident) getPosition
+         pipe2 (str ":" >>? ident) getPosition
             (fun id pos -> (id, pos))
     
     pipe4 (keyword "var" >>. ident) getPosition (opt resultType) (str ":=" >>. expr) 
@@ -168,7 +174,7 @@ let varDec =
 // Function Declarations
 let functionDec =
     let resultType =
-        pipe2 (str ":" >>. ident) getPosition
+        pipe2 (str ":" >>? ident) getPosition
             (fun id pos -> (id, pos))
 
     let params' = 
