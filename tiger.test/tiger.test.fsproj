@@ -79,6 +79,7 @@
     <Reference Include="System.Numerics" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="TestParserAppel.fs" />
     <Compile Include="TestParser.fs" />
     <None Include="App.config" />
     <None Include="packages.config" />

@@ -8,6 +8,17 @@ open FParsec.CharParsers
 type UserState = unit
 type Parser<'t> = Parser<'t,UserState>
 
+let mutable trace = false
+let (<!>) (p: Parser<_,_>) label : Parser<_,_> =
+    fun stream ->
+        if trace then    
+            printfn "%A: Entering %s" stream.Position label
+            let reply = p stream
+            printfn "%A: Leaving %s (%A)" stream.Position label reply.Status
+            reply
+        else
+            p stream
+
 // Comments
 let commentLine : Parser<_> = 
     skipString "//" >>. skipRestOfLine true
@@ -19,18 +30,20 @@ do commentBlockImp :=
     between
         (pstring "/*")
         (pstring "*/")
-        (attempt (eat "/*" >>. commentBlock >>. eat "*/")  
-            <|> (eat "*/"))
+        (eat "*/")
 
 let position (pos:Position) = (pos.Line, pos.Column)
 
 let getPosition = FParsec.CharParsers.getPosition |>> fun pos -> (pos.Line, pos.Column)
 
 // Some abbreviations to make grammar productions more reasonable
-let ws = (skipMany (choice [spaces1; commentBlock; commentLine])) <?> "whitespace"
+let ws = 
+    let spaceOrComment = choice [spaces1; commentBlock; commentLine]
+    
+    (many spaceOrComment |>> ignore) <?> "whitespace"
 
 let ch c = skipChar c >>. ws
-let str s = pstring s .>> ws
+let str s = pstring s >>. ws
 
 let reservedWords = 
     Set.ofList
@@ -91,12 +104,15 @@ let keyword s = attempt (pstring s .>> notFollowedBy letter .>> notFollowedBy di
 // forward declaration of expressions
 let expr, exprImp = createParserForwardedToRef()
 let factor', factor'Imp = createParserForwardedToRef()
-
+let term', term'Imp = createParserForwardedToRef()
+let expAnd', expAnd'Imp = createParserForwardedToRef()
+let expOr', expOr'Imp = createParserForwardedToRef()
+let expOr, expOrImp = createParserForwardedToRef()
 
 // Type declarations
 let typeField = 
-    pipe4 ident (str ":") ident getPosition 
-        (fun name colon type' pos -> 
+    pipe3 ident ((str ":") >>. getPosition) ident  
+        (fun name pos type'  -> 
             {Name = name; 
                 Escape = true;
                 Type = type'; 
@@ -105,8 +121,7 @@ let typeField =
 
 let typeFields = sepBy typeField (str ",")
 
-let typeDec : Parser<TypeDecType,_> =
-
+let typeDec  =
     let nameType = 
         pipe2 ident getPosition 
             (fun name pos -> NameType (name, pos))
@@ -125,13 +140,16 @@ let typeDec : Parser<TypeDecType,_> =
                 ArrayType (ident, pos))
 
     let ptype = 
-        choice [nameType; recordType; arrayType]
+        choice [nameType; recordType; arrayType] .>> ws
 
-    pipe3 (keyword "type" >>. ident ) getPosition (str "=" >>. ptype)
-        (fun name pos type' -> 
-            {Name = name; 
-            Type = type';
-            Position = pos}) <?> "Type Declaration"
+    let typeDec : Parser<TypeDecType,_> = 
+        pipe3 (keyword "type" >>. ident ) getPosition (str "=" >>. ptype)
+            (fun name pos type' -> 
+                {Name = name; 
+                Type = type';
+                Position = pos}) <?> "Type Declaration"
+
+    typeDec .>> ws
 
 // Variable declarations
 let varDec =
@@ -175,9 +193,9 @@ let functionDec =
 // Declarations
 let dec = 
     choiceL [
-        many1 typeDec     |>> (fun decs -> TypeDec decs);
-        varDec            |>> (fun dec -> VarDec dec);
-        many1 functionDec |>> (fun decs -> FunctionDec decs);
+        (many1 typeDec     |>> (fun decs -> TypeDec decs))          <!> "typeDec";       
+        (varDec            |>> (fun dec -> VarDec dec))             <!> "varDec";
+        (many1 functionDec |>> (fun decs -> FunctionDec decs))      <!> "funDec";
     ] "declaration"
 
 
@@ -298,7 +316,7 @@ let letExpr =
     pipe3
         (keyword "let" >>. getPosition)
         (many dec)
-        (keyword "in" >>. expList )
+        (keyword "in" >>. expList .>> keyword "end")
         (fun pos decs expList ->
             let body = match expList with
                        | [(e, pos)] -> e
@@ -308,46 +326,166 @@ let letExpr =
              Body = body;
              Position = pos; })
 
+let arrayExpr =
+    pipe4 ident getPosition (between (str "[") (str "]") expr) ((keyword "of") >>? expr)
+        (fun type' pos size init ->
+            {Type = type';
+             Size = size;
+             Init = init;
+             Position = pos})
+
+let recordExpr =
+    let fieldInit = 
+        pipe3 ident (str "=" >>. getPosition) expr
+            (fun field pos init ->
+                (field, init, pos ))
+
+    let initList = between 
+                    (str "{")
+                    (str "}")
+                    (sepBy fieldInit (str ","))
+
+    pipe3 ident initList getPosition
+        (fun type' initList pos -> 
+            { Fields = initList;
+              Type = type';
+              Position = pos})
+
+
+let nilExpr =
+    keyword "nil" |>> fun a -> NilExp;
+
+let assignExpr =
+    pipe3 lvalue ((str ":=") >>. getPosition) expr
+        (fun var pos exp ->
+            { Var = var;
+              Exp = exp;
+              Position = pos; })
+
 let factor =
     choice [
-        keyword "nil" |>> fun a -> NilExp;
-        number |>> IntExp;
-        strExpr |>> StringExp;
-        seqExpr |>> SeqExp;
-        attempt callExpr |>> CallExp;
-        uminusExpr |>> NegExp;
-        ifExpr |>> IfExp;
-        whileExpr |>> WhileExp;
-        forExpr |>> ForExp;
-        breakExpr |>> BreakExp;
-        letExpr |>> LetExp;
-        lvalue |>> VarExp;
+        nilExpr                          <!> "nilExpr";
+        number |>> IntExp                <!> "intExpr>";
+        strExpr |>> StringExp            <!> "strExpr";
+        seqExpr |>> SeqExp               <!> "seqExpr";
+        attempt callExpr |>> CallExp     <!> "callExpr>";
+        uminusExpr |>> NegExp            <!> "negExpr";
+        attempt ifExpr |>> IfExp         <!> "ifExpr";
+        attempt whileExpr |>> WhileExp   <!> "whileExpr";
+        attempt forExpr |>> ForExp       <!> "forExpr";          
+        breakExpr |>> BreakExp           <!> "breakExpr";
+        attempt letExpr |>> LetExp       <!> "letExpr";
+        attempt arrayExpr |>> ArrayExp   <!> "arrayExp";
+        attempt recordExpr |>> RecordExp <!> "recordExp";
+        attempt assignExpr |>> AssignExp <!> "assignExp";
+        attempt lvalue |>> VarExp        <!> "varExpr";        
     ]
 
 type MathRhs = Operator * Absyn.Position * Exp 
+
+let buildExp lhs (op, pos, rhs) =
+    OpExp
+        {Left = lhs;
+            Operator = op;
+            Right = rhs;
+            Position = pos; }
+
+let binopRhs strOp op = 
+    pipe3 (str strOp >>? getPosition) factor factor'
+        (fun pos exp rhs ->
+            match rhs with 
+            | None -> Some (op, pos, exp)
+            | Some e -> Some (op, pos, buildExp exp e))    
     
 do factor'Imp :=
-    let buildExp lhs (op, pos, rhs) =
-        OpExp
-            {Left = lhs;
-             Operator = op;
-             Right = rhs;
-             Position = pos; }
 
-    let binopRhs strOp op = 
-        pipe3 (str strOp >>. getPosition) factor factor'
-            (fun pos exp rhs ->
-                match rhs with 
-                | None -> Some (op, pos, exp)
-                | Some e -> Some (op, pos, buildExp exp e))
-    
     choice [
         binopRhs "*" MulOp;
         binopRhs "/" DivOp;
         preturn None ]
 
+let expBuilder exp exp' =
+    pipe2 exp exp'
+        (fun exp rhs ->
+            match rhs with
+            | Some rhs -> buildExp exp rhs
+            | None -> exp)
+
+let term = expBuilder factor factor'
+
+do term'Imp :=
+    choice [
+        binopRhs "+" PlusOp;
+        binopRhs "-" MinusOp;
+        preturn None]
+
+let arithExp = expBuilder term term'    
+
+let relExp = 
+    choice [
+        binopRhs "=" EqOp;
+        binopRhs "<>" NeqOp;
+        binopRhs ">=" GeOp;
+        binopRhs "<=" LeOp;
+        binopRhs "<" LtOp;
+        binopRhs ">" GtOp;
+        
+        preturn None
+    ]
+
+let expAnd = expBuilder arithExp relExp
+
+do expAnd'Imp := 
+    let andRhs = 
+        pipe2 (str "&" >>. getPosition) expOr
+            (fun pos exp -> (exp, pos))
+
+    choice [
+        andRhs |>> Some;
+        preturn None
+    ]
+
+do expOrImp := 
+    let generateAnd lhs rhs pos=
+        IfExp 
+            { Test = lhs;
+              Then' = rhs;
+              Else' = Some (IntExp 0L);
+              Position = pos;
+            }
+
+    pipe2 expAnd expAnd'
+        (fun lhs rhs ->
+            match rhs with
+            | Some (exp, pos) -> generateAnd lhs exp pos
+            | None -> lhs)
+
+do expOr'Imp :=
+    let orRhs = 
+        pipe2 (str "|" >>. getPosition) expOr
+            (fun pos exp -> (exp, pos))
+
+    choice [
+        orRhs |>> Some;
+        preturn None
+    ]
 
 do exprImp := 
-    factor
+    let generateOr lhs rhs pos=
+        IfExp 
+            { Test = lhs;
+              Then' =  (IntExp 0L);
+              Else' = Some rhs;
+              Position = pos;
+            }
 
-let prog = expr .>> ws .>> eof
+    let expr =
+        pipe2 expOr expOr' 
+            (fun lhs rhs ->
+                match rhs with
+                | Some (exp, pos) -> generateOr lhs exp pos
+                | None -> lhs)
+
+    expr <?> "expression"
+
+let prog = ws >>. expr .>> ws .>> eof
