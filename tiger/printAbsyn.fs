@@ -7,14 +7,14 @@ let print (exp:Exp) =
     let rec indent i = 
         match i with
         | 0 -> ()
-        | n -> indent (n-1)
+        | n -> printf "  "; indent (n-1)
 
     let operatorName op =
         match op with
         | PlusOp -> "PlusOp"
         | MinusOp -> "MinusOp"
-        | TimesOp -> "TimesOp"
-        | DivideOp -> "DivideOp"
+        | MulOp -> "TimesOp"
+        | DivOp -> "DivideOp"
         | EqOp -> "EqOp"
         | NeqOp -> "NeqOp"
         | LtOp -> "LtOp"
@@ -61,6 +61,9 @@ let print (exp:Exp) =
             indent depth; printf "StringExp(\"%s\")" value
         | CallExp c ->
             indent depth; printf "CallExp(%s, [" c.Func.Name; doList depth printExp c.Args; printf "])"
+        | NegExp (exp,_) ->
+            indent depth; printfn "NegExp(";
+            printExp exp depth; printf ")"
         | OpExp exp ->
             indent depth; printfn "OpExp(%s," (operatorName exp.Operator)
             printExp exp.Left (depth+1); printfn ","

@@ -15,10 +15,10 @@ and Exp =
     | VarExp of Var
     | NilExp
     | IntExp of int64
-    | NegExp of Exp * Position
     | StringExp of string * Position
     | CallExp of CallExpType
     | OpExp of OpExpType
+    | NegExp of Exp * Position
     | RecordExp of RecordExpType
     | SeqExp of (Exp * Position) list
     | AssignExp of AssignExpType

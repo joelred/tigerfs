@@ -24,6 +24,8 @@ do commentBlockImp :=
 
 let position (pos:Position) = (pos.Line, pos.Column)
 
+let getPosition = FParsec.CharParsers.getPosition |>> fun pos -> (pos.Line, pos.Column)
+
 // Some abbreviations to make grammar productions more reasonable
 let ws = (skipMany (choice [spaces1; commentBlock; commentLine])) <?> "whitespace"
 
@@ -88,6 +90,8 @@ let keyword s = attempt (pstring s .>> notFollowedBy letter .>> notFollowedBy di
 
 // forward declaration of expressions
 let expr, exprImp = createParserForwardedToRef()
+let factor', factor'Imp = createParserForwardedToRef()
+
 
 // Type declarations
 let typeField = 
@@ -96,7 +100,7 @@ let typeField =
             {Name = name; 
                 Escape = true;
                 Type = type'; 
-                Position = (position pos)
+                Position = pos
                 }) .>> ws
 
 let typeFields = sepBy typeField (str ",")
@@ -105,7 +109,7 @@ let typeDec : Parser<TypeDecType,_> =
 
     let nameType = 
         pipe2 ident getPosition 
-            (fun name pos -> NameType (name, (position pos)))
+            (fun name pos -> NameType (name, pos))
 
     let recordType = 
         between
@@ -118,7 +122,7 @@ let typeDec : Parser<TypeDecType,_> =
         let parser = keyword "array" >>. keyword "of" >>. ident
         pipe2 parser getPosition 
             (fun ident pos ->
-                ArrayType (ident, position pos))
+                ArrayType (ident, pos))
 
     let ptype = 
         choice [nameType; recordType; arrayType]
@@ -127,13 +131,13 @@ let typeDec : Parser<TypeDecType,_> =
         (fun name pos type' -> 
             {Name = name; 
             Type = type';
-            Position = (position pos)}) <?> "Type Declaration"
+            Position = pos}) <?> "Type Declaration"
 
 // Variable declarations
 let varDec =
     let resultType =
          pipe2 (str ":" >>. ident) getPosition
-            (fun id pos -> (id, position pos))
+            (fun id pos -> (id, pos))
     
     pipe4 (keyword "var" >>. ident) getPosition (opt resultType) (str ":=" >>. expr) 
         (fun id pos type' expr -> 
@@ -141,13 +145,13 @@ let varDec =
               Escape = true;
               Type = type';
               Init = expr;
-              Position = (position pos) })
+              Position = pos })
 
 // Function Declarations
 let functionDec =
     let resultType =
         pipe2 (str ":" >>. ident) getPosition
-            (fun id pos -> (id, position pos))
+            (fun id pos -> (id, pos))
 
     let params' = 
         between
@@ -166,7 +170,7 @@ let functionDec =
               Params = params';
               Result = result;
               Body = body;
-              Position = (position pos)} )
+              Position = pos} )
 
 // Declarations
 let dec = 
@@ -177,22 +181,24 @@ let dec =
     ] "declaration"
 
 
+
+
 // LValues
 // These are a little weird because they are naturally left recursive
 type VarOffset =
     | FieldOffset of Symbol * Absyn.Position
     | SubscriptOffset of Exp * Absyn.Position
-    
+
 let lvalue =
     let rest, restImpl = createParserForwardedToRef()
     
     let restField =
          pipe2 (str "." >>. ident) getPosition
-             (fun name pos -> FieldOffset (name,(position pos)))
+             (fun name pos -> FieldOffset (name, pos))
         
     let restSubscript = 
         pipe2 (between (str"[") (str "]") (expr .>> notFollowedBy (keyword "of"))) getPosition
-            (fun exp pos -> SubscriptOffset (exp, (position pos)))
+            (fun exp pos -> SubscriptOffset (exp, pos))
 
     let prepend a optionList = 
         match optionList with
@@ -215,14 +221,14 @@ let lvalue =
     pipe3 ident getPosition (opt rest)
         (fun name pos rest ->
             match rest with
-            | None -> SimpleVar (name, position pos)
-            | Some l -> buildVar (SimpleVar (name, position pos)) l
+            | None -> SimpleVar (name, pos)
+            | Some l -> buildVar (SimpleVar (name, pos)) l
         )   
 
 let strExpr = 
     pipe2 stringLit getPosition 
         (fun str pos -> 
-            (str, (position pos)))
+            (str, pos))
 
 let callExpr = 
     let paramList = 
@@ -233,78 +239,115 @@ let callExpr =
 
     pipe3 ident getPosition paramList
         (fun name pos params' ->
-            { Func = name; Args = params'; Position = (position pos)})
+            { Func = name; Args = params'; Position = pos})
  
-let opExpr =
-    let opp = new OperatorPrecedenceParser<Exp,Position,_>()
-    
-    let createOpType op pos left right =
-        OpExp
-            { Left = left;
-              Operator = op;
-              Right = right;
-              Position = position pos; }
+let expList = 
+    (sepBy (expr .>>. getPosition) (str ";"))
 
-    let addInfixOperator op opType prec assoc =
-        let op = InfixOperator(op, getPosition .>> ws, prec, assoc, (), fun pos l r -> createOpType opType pos l r)
-        opp.AddOperator(op)
+let seqExpr =
+    between 
+        (str "(")
+        (str ")")
+        expList
 
-    let addUMinus prec assoc =
-        let op = PrefixOperator("-", getPosition .>> ws, prec, assoc, (), fun pos exp -> NegExp (exp, position pos))
-        opp.AddOperator(op)
+let uminusExpr = 
+    pipe2 (str "-" >>. getPosition) expr 
+        (fun pos exp -> (exp, pos))
 
-    let addAnd prec assoc =
-        let ifExp pos l r  =
-            IfExp {
-                Test = l;
-                Then' = r;
-                Else' = Some (IntExp 0L);
-                Position = position pos;
-             }
+let ifExpr =
+    pipe4 
+        (keyword "if" >>. getPosition) 
+        expr
+        (keyword "then" >>. expr) 
+        (opt (keyword "else" >>. expr))
+        (fun pos test then' else' -> 
+                {Test     = test;
+                 Then'    = then';
+                 Else'    = else';
+                 Position = pos; })
 
-        let op = InfixOperator("&", getPosition .>> ws, prec, assoc, (), ifExp)
-        opp.AddOperator(op)
+let whileExpr =
+    pipe3 
+        (keyword "while" >>. getPosition)
+        expr
+        (keyword "do" >>. expr )
+        (fun pos test body ->
+            {Test = test;
+             Body = body;
+             Position = pos; })
 
-    let addOr prec assoc =
-        let ifExp pos l r  =
-            IfExp {
-                Test = l;
-                Then' = IntExp 1L;
-                Else' = Some r;
-                Position = position pos;
-             }
+let forExpr =
+    pipe5 
+        (keyword "for" >>. getPosition)
+        ident
+        (str ":=" >>. expr)
+        (keyword "to" >>. expr)
+        (keyword "do" >>. expr)
+        (fun pos var low high body ->
+            {Var = var;
+             Escape = true;
+             Low = low;
+             High = high;
+             Body = body;
+             Position = pos})
 
-        let op = InfixOperator("|", getPosition .>> ws, prec, assoc, (), ifExp)
-        opp.AddOperator(op)
+let breakExpr =
+    keyword "break" >>. getPosition
 
-    opp.TermParser <- expr <|> between (str "(") (str ")") expr    
+let letExpr = 
+    pipe3
+        (keyword "let" >>. getPosition)
+        (many dec)
+        (keyword "in" >>. expList )
+        (fun pos decs expList ->
+            let body = match expList with
+                       | [(e, pos)] -> e
+                       | _ -> SeqExp expList
 
-    addUMinus 12 true
-    addInfixOperator "*"  MulOp 10 (Associativity.Left) 
-    addInfixOperator "/"  DivOp 10 (Associativity.Left) 
-    addInfixOperator "+"  PlusOp 8 (Associativity.Left) 
-    addInfixOperator "-"  MinusOp 8 (Associativity.Left) 
-    addInfixOperator "="  EqOp 6 (Associativity.None) 
-    addInfixOperator "<>" NeqOp 6 (Associativity.None) 
-    addInfixOperator "<"  LtOp 6 (Associativity.None) 
-    addInfixOperator "<=" LeOp 6 (Associativity.None) 
-    addInfixOperator ">"  GtOp 6 (Associativity.None) 
-    addInfixOperator ">=" GeOp 6 (Associativity.None) 
-    
-    addAnd 4 (Associativity.Left) 
-    addOr  2 (Associativity.Left) 
+            {Decs = decs;
+             Body = body;
+             Position = pos; })
 
-    opp.ExpressionParser
-
-do exprImp := 
+let factor =
     choice [
-        lvalue |>> VarExp;
-        keyword "nil" |>> (fun a -> NilExp)
+        keyword "nil" |>> fun a -> NilExp;
         number |>> IntExp;
         strExpr |>> StringExp;
-        callExpr |>> CallExp;
-        opExpr
+        seqExpr |>> SeqExp;
+        attempt callExpr |>> CallExp;
+        uminusExpr |>> NegExp;
+        ifExpr |>> IfExp;
+        whileExpr |>> WhileExp;
+        forExpr |>> ForExp;
+        breakExpr |>> BreakExp;
+        letExpr |>> LetExp;
+        lvalue |>> VarExp;
+    ]
 
-    ] .>> ws
+type MathRhs = Operator * Absyn.Position * Exp 
+    
+do factor'Imp :=
+    let buildExp lhs (op, pos, rhs) =
+        OpExp
+            {Left = lhs;
+             Operator = op;
+             Right = rhs;
+             Position = pos; }
 
-let prog = expr .>> eof
+    let binopRhs strOp op = 
+        pipe3 (str strOp >>. getPosition) factor factor'
+            (fun pos exp rhs ->
+                match rhs with 
+                | None -> Some (op, pos, exp)
+                | Some e -> Some (op, pos, buildExp exp e))
+    
+    choice [
+        binopRhs "*" MulOp;
+        binopRhs "/" DivOp;
+        preturn None ]
+
+
+do exprImp := 
+    factor
+
+let prog = expr .>> ws .>> eof
