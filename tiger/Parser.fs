@@ -31,9 +31,7 @@ do commentBlockImp :=
         (pstring "/*")
         (pstring "*/")
         (eat "*/")
-
-let position (pos:Position) = (pos.Line, pos.Column)
-
+        
 let getPosition = FParsec.CharParsers.getPosition |>> fun pos -> (pos.Line, pos.Column)
 
 // Some abbreviations to make grammar productions more reasonable

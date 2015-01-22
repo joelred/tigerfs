@@ -422,3 +422,465 @@ type testParserAppel () =
                            
         let parseResult = run prog str
         resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.DifferentRecordTypes () =
+        let str = @"// test28.tig                    
+                   /* error : different record types */
+                    let
+	                    type rectype1 = {name:string , id:int}
+	                    type rectype2 = {name:string , id:int}
+
+	                    var rec1: rectype1 := rectype2 {name=""Name"", id=0}
+                    in
+	                    rec1
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.DifferentArrayTypes () =
+        let str = @"// test29.tig                    
+                   /* error : different array types */
+
+                    let
+	                    type arrtype1 = array of int
+	                    type arrtype2 = array of int
+
+	                    var arr1: arrtype1 := arrtype2 [10] of 0
+                    in
+	                    arr1
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.Synonyms () =
+        let str = @"// test30.tig                    
+                   /* synonyms are fine */
+                    let 
+		                    type a = array of int
+		                    type b = a
+
+		                    var arr1:a := b [10] of 0
+                    in
+		                    arr1[2]
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.VarDeclInitTypeCompatibility () =
+        let str = @"// test31.tig                    
+                   /* error : type constraint and init value differ */
+                    let 
+	                    var a:int := "" ""
+                    in
+	                    a
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.ExpArrayTypeCompatibility () =
+        let str = @"// test32.tig                    
+                   /* error : initializing exp and array type differ */
+
+                    let
+	                    type arrayty = array of int
+
+	                    var a := arrayty [10] of "" ""
+                    in
+	                    0
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.UnknownType () =
+        let str = @"// test33.tig                    
+                   /* error : unknown type */
+                    let
+	                    var a:= rectype {}
+                    in
+	                    0
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.FunctionParamTypeMismatch () =
+        let str = @"// test34.tig    
+                    /* error : formals and actuals have different types */
+                    let
+	                    function g (a:int , b:string):int = a
+                    in
+	                    g(""one"", ""two"")
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.FunctionParamCountMismatch () =
+        let str = @"// test35.tig    
+                    /* error : formals are more then actuals */
+                    let
+	                    function g (a:int , b:string):int = a
+                    in
+	                    g(""one"")
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.FunctionParamCountMismatch2 () =
+        let str = @"// test36.tig    
+                    /* error : formals are more then actuals */
+                    let
+	                    function g (a:int , b:string):int = a
+                    in
+	                    g(3, ""one"", 5)
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.NameHiding () =
+        let str = @"// test37.tig    
+                    /* redeclaration of variable; this is legal, there are two different
+                        variables with the same name.  The second one hides the first.  */
+                    let
+	                    var a := 0
+	                    var a := "" ""
+                    in
+	                    0
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.TypeHiding () =
+        let str = @"// test38.tig    
+                    /* This is illegal, since there are two types with the same name
+                        in the same (consecutive) batch of mutually recursive types. 
+                        See also test47  */
+                    let
+	                    type a = int
+	                    type a = string
+                    in
+	                    0
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.FunctionHiding () =
+        let str = @"// test39.tig    
+                    /* This is illegal, since there are two functions with the same name
+                        in the same (consecutive) batch of mutually recursive functions.
+                       See also test48 */
+                    let
+	                    function g(a:int):int = a
+	                    function g(a:int):int = a
+                    in
+	                    0
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.ProcReturnsValue2 () =
+        let str = @"// test40.tig    
+                    /* error : procedure returns value */
+                    let
+	                    function g(a:int) = a
+                    in 
+	                    g(2)
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.NestedLetLocalHidesGlobal () =
+        let str = @"// test41.tig    
+                    /* local types hide global */
+                    let
+	                    type a = int
+                    in
+	                    let
+		                    type a = string
+	                    in
+		                    0
+	                    end
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.CorrectDeclarations () =
+        let str = @"// test42.tig    
+                    /* correct declarations */
+                    let 
+
+                    type arrtype1 = array of int
+                    type rectype1 = {name:string, address:string, id: int , age: int}
+                    type arrtype2 = array of rectype1
+                    type rectype2 = {name : string, dates: arrtype1}
+
+                    type arrtype3 = array of string
+
+                    var arr1 := arrtype1 [10] of 0
+                    var arr2  := arrtype2 [5] of rectype1 {name=""aname"", address=""somewhere"", id=0, age=0}
+                    var arr3:arrtype3 := arrtype3 [100] of """"
+
+                    var rec1 := rectype1 {name=""Kapoios"", address=""Kapou"", id=02432, age=44}
+                    var rec2 := rectype2 {name=""Allos"", dates= arrtype1 [3] of 1900}
+
+                    in
+
+                    arr1[0] := 1; 
+                    arr1[9] := 3;
+                    arr2[3].name := ""kati"";
+                    arr2[1].age := 23;
+                    arr3[34] := ""sfd"";
+
+                    rec1.name := ""sdf"";
+                    rec2.dates[0] := 2323;
+                    rec2.dates[2] := 2323
+
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.UnitIntMismatch () =
+        let str = @"// test43.tig    
+                    /* initialize with unit and causing type mismatch in addition */
+
+                    let 
+	                    var a := ()
+                    in
+	                    a + 3
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.NilTest () =
+        let str = @"// test44.tig    
+                    /* valid nil initialization and assignment */
+                    let 
+
+	                    type rectype = {name:string, id:int}
+	                    var b:rectype := nil
+
+                    in
+
+	                    b := nil
+
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.NilFailTest () =
+        let str = @"// test45.tig    
+                    /* error: initializing nil expressions not constrained by record type */
+                    let 
+	                    type rectype = {name:string, id:int}
+
+	                    var a:= nil
+                    in
+	                    a
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.ValidRecordCompare () =
+        let str = @"// test46.tig    
+                    /* valid rec comparisons */
+                    let 
+	                    type rectype = {name:string, id:int}
+	                    var b:rectype := nil
+                    in
+	                    b = nil;
+	                    b <> nil
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+    
+    [<Test>]
+    member self.TypeHiding2 () =
+        let str = @"// test47.tig    
+                    /* This is legal.  The second type ""a"" simply hides the first one.
+                       Because of the intervening variable declaration, the two ""a"" types
+                       are not in the same  batch of mutually recursive types.
+                       See also test38 */
+                    let
+	                    type a = int
+	                    var b := 4
+	                    type a = string
+                    in
+	                    0
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.FunctionHiding2 () =
+        let str = @"// test48.tig    
+                    /* This is legal.  The second type ""a"" simply hides the first one.
+                       Because of the intervening variable declaration, the two ""a"" types
+                       are not in the same  batch of mutually recursive types.
+                       See also test38 */
+                    let
+	                    type a = int
+	                    var b := 4
+	                    type a = string
+                    in
+	                    0
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal (Some 1)
+
+    [<Test>]
+    member self.NilBeforeTypeId () =
+        let str = @"// test48.tig    
+                    /* error: syntax error, nil should not be preceded by type-id.  */
+                    let 
+	                    type rectype = {name:string, id:int}
+
+	                    var a:= rectype nil
+                    in
+	                    a
+                    end"
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal None
+
+    [<Test>]
+    member self.Queens () =
+        let str = @"// queens.tig    
+                    /* A program to solve the 8-queens problem */
+
+                    let
+                        var N := 8
+
+                        type intArray = array of int
+
+                        var row := intArray [ N ] of 0
+                        var col := intArray [ N ] of 0
+                        var diag1 := intArray [N+N-1] of 0
+                        var diag2 := intArray [N+N-1] of 0
+
+                        function printboard() =
+                           (for i := 0 to N-1
+	                     do (for j := 0 to N-1 
+	                          do print(if col[i]=j then "" O"" else "" ."");
+	                         print(""\n""));
+                             print(""\n""))
+
+                        function try(c:int) = 
+                    ( /*  for i:= 0 to c do print("".""); print(""\n""); flush();*/
+                         if c=N
+                         then printboard()
+                         else for r := 0 to N-1
+	                       do if row[r]=0 & diag1[r+c]=0 & diag2[r+7-c]=0
+	                               then (row[r]:=1; diag1[r+c]:=1; diag2[r+7-c]:=1;
+		                             col[c]:=r;
+	                                     try(c+1);
+			                     row[r]:=0; diag1[r+c]:=0; diag2[r+7-c]:=0)
+
+                    )
+                     in try(0)
+                    end
+                    "
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal None
+
+    [<Test>]
+    member self.Merge () =
+        let str = @"// merge.tig    
+                   let 
+
+                     type any = {any : int}
+                     var buffer := getchar()
+
+                    function readint(any: any) : int =
+                     let var i := 0
+                         function isdigit(s : string) : int = 
+		                      ord(buffer)>=ord(""0"") & ord(buffer)<=ord(""9"")
+                         function skipto() =
+                           while buffer="" "" | buffer=""\n""
+                             do buffer := getchar()
+                      in skipto();
+                         any.any := isdigit(buffer);
+                         while isdigit(buffer)
+                           do (i := i*10+ord(buffer)-ord(""0""); buffer := getchar());
+                         i
+                     end
+
+                     type list = {first: int, rest: list}
+
+                     function readlist() : list =
+                        let var any := any{any=0}
+                            var i := readint(any)
+                         in if any.any
+                             then list{first=i,rest=readlist()}
+                             else nil
+                        end
+
+                     function merge(a: list, b: list) : list =
+                       if a=nil then b
+                       else if b=nil then a
+                       else if a.first < b.first 
+                          then list{first=a.first,rest=merge(a.rest,b)}
+                          else list{first=b.first,rest=merge(a,b.rest)}
+
+                     function printint(i: int) =
+                      let function f(i:int) = if i>0 
+	                         then (f(i/10); print(chr(i-i/10*10+ord(""0""))))
+                       in if i<0 then (print(""-""); f(-i))
+                          else if i>0 then f(i)
+                          else print(""0"")
+                      end
+
+                     function printlist(l: list) =
+                       if l=nil then print(""\n"")
+                       else (printint(l.first); print("" ""); printlist(l.rest))
+
+                       var list1 := readlist()
+                       var list2 := (buffer:=getchar(); readlist())
+
+
+                      /* BODY OF MAIN PROGRAM */
+                     in printlist(merge(list1,list2))
+                    end
+                    "
+                           
+        let parseResult = run prog str
+        resultType parseResult |> should equal None
+
