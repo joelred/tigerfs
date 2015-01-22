@@ -31,9 +31,7 @@ do commentBlockImp :=
         (pstring "/*")
         (pstring "*/")
         (eat "*/")
-        
-let getPosition = FParsec.CharParsers.getPosition |>> fun pos -> (pos.Line, pos.Column)
-
+   
 // Some abbreviations to make grammar productions more reasonable
 let ws = 
     let spaceOrComment = choice [spaces1; commentBlock; commentLine]

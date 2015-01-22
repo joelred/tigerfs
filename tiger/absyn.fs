@@ -3,7 +3,7 @@
 open SymbolNS
 
 /// Position within the file
-type Position = int64*int64
+type Position = FParsec.Position
 
 /// Abstract variable usage
 type Var =
@@ -20,6 +20,7 @@ and Exp =
     | OpExp of OpExpType
     | NegExp of Exp * Position
     | RecordExp of RecordExpType
+    | ArrayExp of ArrayExpType
     | SeqExp of (Exp * Position) list
     | AssignExp of AssignExpType
     | IfExp of IfExpType
@@ -27,7 +28,6 @@ and Exp =
     | ForExp of ForExpType
     | BreakExp of Position
     | LetExp of LetExpType
-    | ArrayExp of ArrayExpType
 
 and CallExpType = {
     Func: Symbol;
@@ -45,6 +45,12 @@ and RecordExpType = {
     Type: Symbol;
     Position: Position
     }    
+and ArrayExpType = {
+    Type: Symbol;
+    Size: Exp;
+    Init: Exp;
+    Position: Position
+    }
 and AssignExpType = {
     Var: Var;
     Exp: Exp;
@@ -72,12 +78,6 @@ and ForExpType =  {
 and LetExpType = {
     Decs: Dec list;
     Body: Exp;
-    Position: Position
-    }
-and ArrayExpType = {
-    Type: Symbol;
-    Size: Exp;
-    Init: Exp;
     Position: Position
     }
 /// Abstract Declaration
