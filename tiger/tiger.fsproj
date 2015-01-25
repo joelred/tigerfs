@@ -61,6 +61,7 @@
     <Compile Include="ErrorMsg.fs" />
     <Compile Include="Parser.fs" />
     <Compile Include="Types.fs" />
+    <Compile Include="Translate.fs" />
     <Compile Include="Environment.fs" />
     <Compile Include="Semant.fs" />
     <None Include="App.config" />

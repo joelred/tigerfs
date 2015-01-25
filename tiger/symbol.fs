@@ -44,8 +44,9 @@ type Table<'a> (map : Map<Symbol, 'a>) =
     
     static member empty = Table(Map.empty)
 
-    member t.enter k v =
+    member t.Add k v =
          Table(Map.add k v map)
     
-    member t.look k =
+    member t.TryFind k =
         Map.tryFind k map
+        
