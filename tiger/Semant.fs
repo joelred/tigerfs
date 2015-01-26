@@ -58,49 +58,112 @@ let typesMatch l namedR =
 let typesMismatch typ1 typ2 =
     not (typesMatch typ1 typ2)
 
-let validateType type' (tenv : TypeEnv) =
+let getType name pos (tenv: TypeEnv) = 
+    let type' = tenv.TryFind name
+    match type' with
+    | Some t ->
+        t
+    | None -> 
+        ErrorMsg.Error pos (sprintf "Unknown type: %A" name)
+        Error
+
+let hasDuplicateNames decs errorMsg=         
+        let (hasDuplicate, _) = 
+            List.fold 
+                (fun (hasDuplicate, nameSet) (name, pos) -> 
+                    if Set.contains name nameSet then
+                        ErrorMsg.Error pos (sprintf errorMsg name)
+                        (true, nameSet)
+                    else
+                        (hasDuplicate, Set.add name nameSet))
+                (false, Set.empty)
+                decs
+        hasDuplicate
+
+let translateType type' (tenv : TypeEnv) =
     match type' with 
-    | NameType (sym, pos) ->
-        let type' = tenv.TryFind sym
-        match type' with
-        | Some type' ->
-            type'
-        | None ->
-            ErrorMsg.Error pos "Declared type must match initializer"
-            Error
+    | NameType (sym, pos) -> getType sym pos tenv
     | RecordType fieldList ->
         let unique = Types.nextUnique
         let typeList =
+            //TODO: Make sure field names are unique
+
             List.map 
                 (fun (field : Field) -> 
-                    let fieldType = tenv.TryFind field.Type
-                    match fieldType with 
-                    | Some fieldType ->
-                        (field.Name, fieldType)
-                    | None ->
-                        ErrorMsg.Error field.Position "Unknown type"
-                        (field.Name,Error))
+                    let fieldType = getType field.Type field.Position tenv
+                    (field.Name, fieldType))                    
                 fieldList
         Record (typeList, unique)
     | ArrayType (baseTypeName, pos) ->
         let uniquifier = Types.nextUnique
-        let baseType = tenv.TryFind baseTypeName
-        match baseType with
-        | Some type' ->
-            Array (type', uniquifier)
-        | None ->
-            ErrorMsg.Error pos "Unknown type"
-            Array(Error, uniquifier)        
+        let baseType = getType baseTypeName pos tenv
+        Array(baseType, uniquifier)  
                            
-let rec validateDec dec (env : Env) : Env =
+let rec translateDec dec (env : Env) : Env =
     let (tenv, venv) = env
 
-    let rec validateFunctionDecs decs =
-        //TODO insert functions
-        env
+    let rec translateFunctionDecs (decs : FunctionDecType list)  =
+        //First make sure decs doesn't contain any duplicate names
+        let namepos = List.map (fun (dec : FunctionDecType) -> (dec.Name, dec.Position)) decs
+        if not <| hasDuplicateNames namepos "Duplicate function name %A found in group" then
 
-    let validateVarDec dec =
-        let (initExp, initType) = validateExp dec.Init env
+            /// Get just the function signature without worrying about the body
+            let getSignature venv (dec:FunctionDecType) = 
+                let resultType =
+                    match dec.Result with
+                    | Some (typeName, pos) -> getType typeName pos tenv                
+                    | None -> Unit
+            
+                let paramTypes = List.map 
+                                    (fun (param:Field) -> getType param.Name param.Position tenv)
+                                    dec.Params
+             
+                { Formals = paramTypes; Result = resultType; }
+       
+            /// Updated environment with all the function signatures
+            let functionsVarEnv = 
+                List.fold  
+                    (fun (venv:VarEnv) (dec:FunctionDecType) ->
+                            venv.Add dec.Name (FunEntry (getSignature venv dec)))
+                    venv
+                    decs
+                    
+            /// Translate a function body
+            let translateFunction (func:FunctionDecType) =
+                // make sure that the function parameter names are all unique
+                let namepos = List.map 
+                                (fun (field:Field) -> (field.Name, field.Position)) 
+                                func.Params
+                ignore <| hasDuplicateNames namepos "Duplicate parameter name %A found" 
+
+                // Get the current function's signature
+                let funEntry = 
+                    match functionsVarEnv.TryFind func.Name with
+                    | Some (FunEntry functionHeader) -> functionHeader
+                    | _ -> 
+                        // We just inserted these in functionsEnv, so it better be there
+                        ErrorMsg.Impossible "Compiler error: Unknown function %A" func.Name
+                // Insert the parameters into the namespace
+                let functionVenv =
+                    List.fold2 
+                        (fun (venv:VarEnv) (field: Field) type' -> 
+                            venv.Add field.Name (VarEntry {Type = type'; CanAssign = true}) )
+                        functionsVarEnv
+                        func.Params
+                        funEntry.Formals
+            
+                let (bodyExp, bodyType) = translateExp func.Body (tenv, functionVenv) None
+
+                if typesMismatch bodyType funEntry.Result then
+                    ErrorMsg.Error func.Position "Body type doesn't match declared type"
+            
+            List.iter translateFunction decs
+            (tenv,functionsVarEnv)
+        else
+            (tenv,venv)
+
+    let translateVarDec dec =
+        let (initExp, initType) = translateExp dec.Init env None
         match dec.Type with
         | Some (declaredTypeName,pos) ->
             let declaredType = tenv.TryFind declaredTypeName
@@ -117,25 +180,51 @@ let rec validateDec dec (env : Env) : Env =
         | None -> 
             (tenv, venv.Add dec.Name (VarEntry { Type = initType; CanAssign = true }))   
 
-    let rec validateTypeDecs decs = 
-        // TODO: Insert type declarations
-        env
+    let translateTypeDecs decs =
+        //First make sure decs doesn't contain any duplicate names
+        let namepos = List.map (fun (dec : TypeDecType) -> (dec.Name, dec.Position)) decs
+        if not <| hasDuplicateNames namepos "Duplicate type name %A found in group" then
+                 
+            // Add all the type names without binding the actual types
+            let addType (tenv:TypeEnv) (dec:TypeDecType) =
+                tenv.Add 
+                    dec.Name 
+                    (Name {Name=dec.Name; Type = None})
+
+            // Fill out the actual types
+            let augmentedTypeEnv = List.fold addType tenv decs
+        
+            let assignType (dec : TypeDecType) =                
+                let alias = 
+                    match augmentedTypeEnv.TryFind dec.Name with                
+                    | Some (Name a)-> a
+                    | _ -> ErrorMsg.Impossible "Compiler Error: Unknown type %A after insertion"
+
+                let type' = translateType dec.Type augmentedTypeEnv
+
+                alias.Type <- Some type'
+
+            List.iter assignType decs
+
+            (augmentedTypeEnv, venv)
+        else
+            env
 
     match dec with 
     | FunctionDec decs ->
-        validateFunctionDecs decs       
+        translateFunctionDecs decs       
     | VarDec var ->
-        validateVarDec var
+        translateVarDec var
     | TypeDec decs ->
-        validateTypeDecs decs
+        translateTypeDecs decs
 
-and validateDecs decs env =
+and translateDecs decs env =
     List.fold 
-        (fun env dec -> validateDec dec env)
+        (fun env dec -> translateDec dec env)
         env
         decs
 
-and validateVar var (env : Env) =
+and translateVar var (env : Env) =
     let (typeEnv, varEnv) = env
     
     match var with
@@ -152,7 +241,7 @@ and validateVar var (env : Env) =
             ((), Error, true)
     
     | FieldVar (var, fieldName, pos) ->
-        let (_, type', canAssign) = validateVar var env
+        let (_, type', canAssign) = translateVar var env
         match bareType type' with
         | Record (fieldList, _) ->
             match List.tryFind (fun (sym, type') -> fieldName = sym) fieldList with
@@ -166,7 +255,7 @@ and validateVar var (env : Env) =
             ((), Error, true)
 
     | SubscriptVar (var, subscript, pos) ->
-        let (_, type', canAssign) = validateVar var env
+        let (_, type', canAssign) = translateVar var env
         match bareType type' with
         | Array (type', _) ->
             ((), type', true)
@@ -176,10 +265,10 @@ and validateVar var (env : Env) =
             ErrorMsg.Error pos "Attempt to subscript in non-array type"
             ((), Error, true)
 
-and validateExp exp (env : Env) : ExpTy =
+and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
     let (typeEnv, varEnv) = env
     
-    let validateCall call (env : Env) =
+    let translateCall call (env : Env) =
         let (typeEnv, varEnv) = env
 
         match varEnv.TryFind call.Func with
@@ -187,7 +276,7 @@ and validateExp exp (env : Env) : ExpTy =
             if( f.Formals.Length = call.Args.Length ) then
                 List.iter2 
                     (fun expectedType receivedExp ->
-                        let (_, receivedType) = validateExp receivedExp env
+                        let (_, receivedType) = translateExp receivedExp env None
                         if typesMismatch receivedType expectedType then
                             ErrorMsg.Error call.Position (sprintf "Type mismatch in arguments to %A" call.Func) )
                     f.Formals
@@ -201,9 +290,9 @@ and validateExp exp (env : Env) : ExpTy =
             ErrorMsg.Error call.Position (sprintf "Function expected at %A" call.Func)
             ((), Error)
 
-    let validateOperator op (env : Env) =        
-        let (leftExp, leftType) = validateExp op.Left env
-        let (rightExp, rightType) = validateExp op.Right env
+    let translateOperator op (env : Env) =        
+        let (leftExp, leftType) = translateExp op.Left env breakLabel
+        let (rightExp, rightType) = translateExp op.Right env breakLabel
       
         match bareType leftType with
         | Error -> 
@@ -294,7 +383,7 @@ and validateExp exp (env : Env) : ExpTy =
             ((), Int)
         | Name _ -> ErrorMsg.Impossible "Forbidden type in operator"
 
-    let validateRecExp (exp:RecordExpType) =        
+    let translateRecExp (exp:RecordExpType) =        
         match typeEnv.TryFind exp.Type with
         | None -> 
             ErrorMsg.Error exp.Position (sprintf "Unknown type %A" exp.Type)
@@ -306,7 +395,7 @@ and validateExp exp (env : Env) : ExpTy =
                     List.iter2
                         (fun (expectedName, expectedType) (name, value, pos) ->
                             if expectedName = name then
-                                let (trexp, type') = validateExp value env
+                                let (trexp, type') = translateExp value env breakLabel
                                 if typesMismatch type' expectedType then
                                     ErrorMsg.Error pos "Type mismatch"                                
                             else
@@ -320,7 +409,7 @@ and validateExp exp (env : Env) : ExpTy =
                 ErrorMsg.Error exp.Position (sprintf "%A is not a record type" exp.Type)
                 ((), Error)
 
-    let validateArrayExp (exp:ArrayExpType) =        
+    let translateArrayExp (exp:ArrayExpType) =        
         match typeEnv.TryFind exp.Type with
         | None -> 
             ErrorMsg.Error exp.Position (sprintf "Unknown type %A" exp.Type)
@@ -328,8 +417,8 @@ and validateExp exp (env : Env) : ExpTy =
         | Some type' ->
             match type' with
             | Array (elementType, _) -> 
-                let (sizeExp, sizeType) = validateExp exp.Size env
-                let (initExp, initType) = validateExp exp.Init env
+                let (sizeExp, sizeType) = translateExp exp.Size env breakLabel
+                let (initExp, initType) = translateExp exp.Init env breakLabel
                 if typesMismatch sizeType Int then
                    ErrorMsg.Error exp.Position "Size must be an integer"
                 else if typesMismatch initType elementType then
@@ -340,9 +429,9 @@ and validateExp exp (env : Env) : ExpTy =
                 ErrorMsg.Error exp.Position (sprintf "%A is not an array type" exp.Type)
                 ((), Error)
 
-    let validateForExp (exp:ForExpType) =        
-        let (lowExp, lowType) = validateExp exp.Low env
-        let (highExp, highType) = validateExp exp.High env
+    let translateForExp (exp:ForExpType) =        
+        let (lowExp, lowType) = translateExp exp.Low env breakLabel
+        let (highExp, highType) = translateExp exp.High env breakLabel
 
         if typesMismatch lowType Int || typesMismatch highType Int then
             ErrorMsg.Error exp.Position "Bounds of for expression must be integers"
@@ -350,15 +439,15 @@ and validateExp exp (env : Env) : ExpTy =
         let forVarEntry = VarEntry { Type = Int; CanAssign = false; }
     
         let augmentedEnv = (typeEnv, varEnv.Add exp.Var forVarEntry)    
-        let (bodyExp, bodyType) = validateExp exp.Body augmentedEnv
+        let (bodyExp, bodyType) = translateExp exp.Body augmentedEnv (Some true)
         if typesMismatch bodyType Unit then
             ErrorMsg.Error exp.Position "Body of for expression must not yield a value"
 
         ((), Unit)
 
-    let validateWhileExp (exp:WhileExpType) =
-        let (testExp, testType) = validateExp exp.Test env
-        let (bodyExp, bodyType) = validateExp exp.Body env
+    let translateWhileExp (exp:WhileExpType) =
+        let (testExp, testType) = translateExp exp.Test env breakLabel
+        let (bodyExp, bodyType) = translateExp exp.Body env (Some true)
 
         if typesMismatch testType Int then
             ErrorMsg.Error exp.Position "Test must have type Int"
@@ -368,10 +457,10 @@ and validateExp exp (env : Env) : ExpTy =
 
         ((), Unit)
 
-    let validateAssignExp (exp:AssignExpType) =
-        //TODO: validateVar should return the trexp 
-        let _, varType, canAssign = validateVar exp.Var env
-        let (rhsExp, rhsType) = validateExp exp.Exp env
+    let translateAssignExp (exp:AssignExpType) =
+        //TODO: translateVar should return the trexp 
+        let _, varType, canAssign = translateVar exp.Var env
+        let (rhsExp, rhsType) = translateExp exp.Exp env breakLabel
 
         if not canAssign then
             ErrorMsg.Error exp.Position "Cannot assign to variable"
@@ -381,15 +470,15 @@ and validateExp exp (env : Env) : ExpTy =
 
         ((), Unit)
 
-    let validateIfExp (exp:IfExpType) =
+    let translateIfExp (exp:IfExpType) =
         let (typeEnv, varEnv) = env
-        let (testExp, testType) = validateExp exp.Test env
-        let (thenExp, thenType) = validateExp exp.Then' env
+        let (testExp, testType) = translateExp exp.Test env breakLabel
+        let (thenExp, thenType) = translateExp exp.Then' env breakLabel
     
         if typesMismatch testType Int then  ErrorMsg.Error exp.Position "Test must evaluate to an integer" 
         match exp.Else' with
         | Some else' -> 
-            let (elseExp, elseType) = validateExp else' env
+            let (elseExp, elseType) = translateExp else' env breakLabel
             if typesMismatch thenType elseType then 
                 ErrorMsg.Error exp.Position (sprintf "Then and else types must match")
                 ((), Error)
@@ -402,7 +491,7 @@ and validateExp exp (env : Env) : ExpTy =
 
     match exp with
     | VarExp var -> 
-        let (_, type', _) = validateVar var env
+        let (_, type', _) = translateVar var env
         ((), type')
     | NilExp ->
         ((), Type.Nil)
@@ -411,11 +500,11 @@ and validateExp exp (env : Env) : ExpTy =
     | StringExp _ ->
         ((), Type.String)
     | CallExp call ->
-        validateCall call env
+        translateCall call env
     | OpExp op ->
-        validateOperator op env
+        translateOperator op env
     | NegExp (exp, pos) ->
-        let (trexp, type') = validateExp exp env 
+        let (trexp, type') = translateExp exp env breakLabel
 
         match type' with
         | Int
@@ -423,27 +512,30 @@ and validateExp exp (env : Env) : ExpTy =
         | _ -> ErrorMsg.Error pos "Type mismatch"        
         ((), Int)
     | RecordExp recExp ->
-        validateRecExp recExp
+        translateRecExp recExp
     | ArrayExp arrExp ->
-        validateArrayExp arrExp
+        translateArrayExp arrExp
     | SeqExp lst ->                
-        List.fold (fun acc (exp, pos) -> validateExp exp env) ((), Unit) lst
+        List.fold (fun acc (exp, pos) -> translateExp exp env breakLabel) ((), Unit) lst
     | AssignExp exp ->
-        validateAssignExp exp
+        translateAssignExp exp
     | IfExp exp ->
-        validateIfExp exp
+        translateIfExp exp
     | WhileExp exp ->
-        validateWhileExp exp
+        translateWhileExp exp
     | ForExp exp ->
-        validateForExp exp    
+        translateForExp exp    
     | BreakExp pos ->
+        match breakLabel with
+        | Some value -> ()
+        | None -> ErrorMsg.Error pos "Break must be enclosed in a loop"
         ((), Unit)
     | LetExp exp ->
-        let updatedEnv = validateDecs exp.Decs env
-        validateExp exp.Body updatedEnv
+        let updatedEnv = translateDecs exp.Decs env
+        translateExp exp.Body updatedEnv breakLabel
 
-let validateProg program =
-    let (translated, expType) = validateExp program Environment.BaseEnv 
+let translateProg program =
+    let (translated, expType) = translateExp program Environment.BaseEnv None
 
     // Programs have to return type Int
     if typesMismatch expType Int then
@@ -455,6 +547,6 @@ let validateProg program =
 let transProg program =
     ErrorMsg.reset
 
-    validateProg program
+    translateProg program
 
         
