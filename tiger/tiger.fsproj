@@ -55,6 +55,7 @@
     <Reference Include="System.Numerics" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Exceptions.fs" />
     <Compile Include="symbol.fs" />
     <Compile Include="absyn.fs" />
     <Compile Include="printAbsyn.fs" />

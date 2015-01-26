@@ -17,7 +17,7 @@ type ErrorMsg () =
 
         if errorCount > maxErrors then
             ErrorMsg.PrintCount
-            failwithf "Too many errors"
+            raise (Exceptions.SemanticError "Too many errors")
     
     static member Impossible msg =
         failwithf "Compiler Error: %s\n" msg

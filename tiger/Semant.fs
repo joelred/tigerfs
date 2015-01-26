@@ -542,11 +542,15 @@ let translateProg program =
         let pos = new Position ("", 0L ,0L, 0L)
         ErrorMsg.Error pos "Program must have type Int"
 
+    if ErrorMsg.HasErrors then
+        ErrorMsg.PrintCount
+        raise (Exceptions.SemanticError "Semantic errors found")
+    
     translated
 
 let transProg program =
     ErrorMsg.reset
 
-    translateProg program
+    translateProg program 
 
         
