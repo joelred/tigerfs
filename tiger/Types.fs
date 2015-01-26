@@ -1,4 +1,4 @@
-﻿module Types
+﻿module internal Tiger.Types 
 
 type unique = int
 

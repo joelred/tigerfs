@@ -1,4 +1,4 @@
-﻿module ErrorMsgNS
+﻿module internal Tiger.ErrorMsgNS
 
 type ErrorMsg () =
    
@@ -17,7 +17,7 @@ type ErrorMsg () =
 
         if errorCount > maxErrors then
             ErrorMsg.PrintCount
-            raise (Exceptions.SemanticError "Too many errors")
+            raise (TigerExceptions.SemanticError "Too many errors")
     
     static member Impossible msg =
         failwithf "Compiler Error: %s\n" msg

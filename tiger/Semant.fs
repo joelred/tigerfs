@@ -1,4 +1,4 @@
-﻿module Semant
+﻿module internal Tiger.Semant
 
 open Absyn
 open Environment
@@ -544,7 +544,7 @@ let translateProg program =
 
     if ErrorMsg.HasErrors then
         ErrorMsg.PrintCount
-        raise (Exceptions.SemanticError "Semantic errors found")
+        raise (TigerExceptions.SemanticError "Semantic errors found")
     
     translated
 

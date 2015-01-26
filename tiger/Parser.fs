@@ -1,4 +1,4 @@
-﻿module Parser
+﻿module internal Tiger.Parser
 
 open SymbolNS
 open Absyn

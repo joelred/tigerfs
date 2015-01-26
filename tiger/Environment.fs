@@ -1,4 +1,5 @@
-﻿module Environment
+﻿module internal Tiger.Environment
+
 open Types
 open SymbolNS
 

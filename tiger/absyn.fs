@@ -1,17 +1,17 @@
-﻿module Absyn
+﻿module internal Tiger.Absyn
 
 open SymbolNS
 
 /// Position within the file
-type Position = FParsec.Position
+type internal Position = FParsec.Position
 
 /// Abstract variable usage
-type Var =
+type internal Var =
      | SimpleVar of Symbol * Position
      | FieldVar of Var * Symbol * Position
      | SubscriptVar of Var * Exp * Position
 /// Abstract Expression
-and Exp =
+and internal Exp =
     | VarExp of Var
     | NilExp
     | IntExp of int64
@@ -29,45 +29,45 @@ and Exp =
     | BreakExp of Position
     | LetExp of LetExpType
 
-and CallExpType = {
+and internal CallExpType = {
     Func: Symbol;
     Args: Exp list;
     Position: Position
     }
-and OpExpType = {
+and internal OpExpType = {
     Left: Exp;
     Operator: Operator;
     Right: Exp; 
     Position: Position
     }
-and RecordExpType = {
+and internal RecordExpType = {
     Fields: (Symbol * Exp * Position) list;
     Type: Symbol;
     Position: Position
     }    
-and ArrayExpType = {
+and internal ArrayExpType = {
     Type: Symbol;
     Size: Exp;
     Init: Exp;
     Position: Position
     }
-and AssignExpType = {
+and internal AssignExpType = {
     Var: Var;
     Exp: Exp;
     Position: Position
     }
-and IfExpType = {
+and internal IfExpType = {
     Test: Exp;
     Then': Exp;
     Else': Exp option;
     Position: Position
     }
-and WhileExpType = {
+and internal WhileExpType = {
     Test: Exp;
     Body: Exp;
     Position: Position
     }
-and ForExpType =  {
+and internal ForExpType =  {
     Var: Symbol;
     mutable Escape: bool ;
     Low: Exp;
@@ -75,18 +75,18 @@ and ForExpType =  {
     Body: Exp;
     Position: Position
     }
-and LetExpType = {
+and internal LetExpType = {
     Decs: Dec list;
     Body: Exp;
     Position: Position
     }
 /// Abstract Declaration
-and Dec = 
+and internal Dec = 
     | FunctionDec of FunctionDecType list
     | VarDec of VarDecType        
     | TypeDec of TypeDecType list
     
-and FunctionDecType = {
+and internal FunctionDecType = {
     Name: Symbol;
     Params: Field list;
     Result: (Symbol * Position) option;
@@ -94,30 +94,30 @@ and FunctionDecType = {
     Position: Position
     }
      
-and VarDecType= {
+and internal VarDecType= {
     Name: Symbol;
     mutable Escape: bool;
     Type: (Symbol * Position) option;
     Init: Exp;
     Position: Position
     }
-and TypeDecType = {
+and internal TypeDecType = {
     Name: Symbol;
     Type: Type;
     Position: Position
     }  
 /// Abstract type definition
-and Type = 
+and internal Type = 
     | NameType of Symbol * Position
     | RecordType of Field list
     | ArrayType of Symbol * Position
-and Field = {
+and internal Field = {
     Name: Symbol;
     mutable Escape: bool;
     Type: Symbol;
     Position: Position
     }
-and Operator = 
+and internal Operator = 
     | MulOp | DivOp
     | PlusOp | MinusOp 
     | EqOp | NeqOp | LtOp | LeOp | GtOp | GeOp

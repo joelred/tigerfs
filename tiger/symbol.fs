@@ -1,8 +1,8 @@
-﻿module SymbolNS
+﻿module internal Tiger.SymbolNS
 
 open System.Collections.Generic
 
-type Symbol( name: string, idCode: int ) = 
+type internal Symbol( name: string, idCode: int ) = 
 
     static let mutable nextValue = 0
     static let mutable dictionary = Map.empty;
@@ -40,7 +40,7 @@ type Symbol( name: string, idCode: int ) =
 
 
 
-type Table<'a> (map : Map<Symbol, 'a>) =
+type internal Table<'a> (map : Map<Symbol, 'a>) =
     
     static member empty = Table(Map.empty)
 

@@ -1,4 +1,4 @@
-﻿module Translate
+﻿module internal Tiger.Translate
 
 type Exp =
     unit
