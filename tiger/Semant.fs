@@ -7,57 +7,6 @@ open Types
 
 type ExpTy = Translate.Exp * Types.Type
 
-let bareType type' = 
-    match type' with
-    | Name alias -> 
-        match alias.Type with 
-        | Some t -> t
-        | None -> type'
-    | _ ->
-        type'
-
-let typesMatch l namedR =
-    let r = bareType namedR
-
-    match bareType l with
-    | Array (_, lu) ->
-        match r with
-        | Array (_, ru) -> lu = ru 
-        | Error -> true
-        |_ -> false
-    | Record (_, lu) ->
-        match r with
-        | Nil -> true        
-        | Record (_, ru) -> lu = ru
-        | Error -> true
-        | _ -> false
-    | Nil ->
-        match r with         
-        | Nil -> true        
-        | Record _ -> true
-        | Error -> true
-        | _ -> false
-    | Int ->
-        match r with
-        | Int -> true
-        | Error -> true
-        | _ -> false
-    | String ->
-        match r with
-        | String -> true
-        | Error -> true
-        | _ -> false
-    | Name _ -> false
-    | Unit -> 
-        match r with 
-        | Unit -> true
-        | Error -> true
-        | _ -> false
-    | Error -> true
-
-let typesMismatch typ1 typ2 =
-    not (typesMatch typ1 typ2)
-
 let getTypeByName name pos (tenv: TypeEnv) = 
     let type' = tenv.TryFind name
     match type' with
@@ -65,7 +14,7 @@ let getTypeByName name pos (tenv: TypeEnv) =
         t
     | None -> 
         ErrorMsg.Error pos (sprintf "Unknown type: %A" name)
-        Error
+        Top
 
 let hasDuplicateNames decs errorMsg=         
         let (hasDuplicate, _) = 
@@ -172,14 +121,19 @@ let rec translateDec dec (env : Env) : Env =
             | Some type' ->
                 if typesMismatch type' initType then
                     ErrorMsg.Error dec.Position "Declared type must match initializer"
-                    (tenv, venv.Add dec.Name (VarEntry { Type = Error; CanAssign = true }))
+                    (tenv, venv.Add dec.Name (VarEntry { Type = Top; CanAssign = true }))
                 else
                     (tenv, venv.Add dec.Name (VarEntry { Type = type'; CanAssign = true }))                
-            | None ->
+            | None ->                
                 ErrorMsg.Error dec.Position (sprintf "Declared type %A does not exist" declaredTypeName)
-                (tenv, venv.Add dec.Name (VarEntry { Type = Error; CanAssign = true }))   
+                (tenv, venv.Add dec.Name (VarEntry { Type = Top; CanAssign = true }))   
         | None -> 
-            (tenv, venv.Add dec.Name (VarEntry { Type = initType; CanAssign = true }))   
+            match initType with
+            | Nil -> 
+                ErrorMsg.Error dec.Position ("Cannot assign nil to unknown type")
+                (tenv, venv.Add dec.Name (VarEntry { Type = Top; CanAssign = true }))
+            | _ ->
+                (tenv, venv.Add dec.Name (VarEntry { Type = initType; CanAssign = true }))   
 
     let translateTypeDecs (decs:TypeDecType list) =
         let pos = match decs with
@@ -217,7 +171,7 @@ let rec translateDec dec (env : Env) : Env =
                 | Name alias ->     
                     if List.exists (fun ty -> ty = alias.Name) path then
                         ErrorMsg.Error pos "Cycle in this group of type definitions"
-                        Error      
+                        Top      
                     else                                          
                         match alias.Type with   
                         | Some (Name alias') ->                                                                                                      
@@ -260,10 +214,10 @@ and translateVar var (env : Env) =
             ((), varType.Type, varType.CanAssign)
         | Some (FunEntry _) ->
             ErrorMsg.Error pos (sprintf "%A is a function" sym)
-            ((), Error, false)          
+            ((), Top, false)          
         | None ->
             ErrorMsg.Error pos (sprintf "%A is not defined" sym)
-            ((), Error, true)
+            ((), Top, true)
     
     | FieldVar (var, fieldName, pos) ->
         let (_, type', canAssign) = translateVar var env
@@ -273,22 +227,22 @@ and translateVar var (env : Env) =
             | Some (sym, type') -> ((), type', true)
             | None -> 
                 ErrorMsg.Error pos (sprintf "%A is not a field in this record" fieldName)
-                ((), Error, true)
-        | Error -> ((), Error, true)
+                ((), Top, true)
+        | Top -> ((), Top, true)
         | _ -> 
             ErrorMsg.Error pos "Attempt to assign field in non-record type"
-            ((), Error, true)
+            ((), Top, true)
 
     | SubscriptVar (var, subscript, pos) ->
         let (_, type', canAssign) = translateVar var env
         match bareType type' with
         | Array (type', _) ->
             ((), type', true)
-        | Error -> 
-            ((), Error, true)
+        | Top -> 
+            ((), Top, true)
         | _ -> 
             ErrorMsg.Error pos "Attempt to subscript in non-array type"
-            ((), Error, true)
+            ((), Top, true)
 
 and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
     let (typeEnv, varEnv) = env
@@ -313,15 +267,15 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
 
         | _ -> 
             ErrorMsg.Error call.Position (sprintf "Function expected at %A" call.Func)
-            ((), Error)
+            ((), Top)
 
     let translateOperator op (env : Env) =        
         let (leftExp, leftType) = translateExp op.Left env breakLabel
         let (rightExp, rightType) = translateExp op.Right env breakLabel
       
         match bareType leftType with
-        | Error -> 
-            ((), Error)
+        | Top -> 
+            ((), Top)
         | Record (_,lu) ->
             match op.Operator with
             | EqOp
@@ -331,7 +285,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
                     if lu <> ru 
                     then ErrorMsg.Error op.Position "Records not of the same type"                
                 | Nil 
-                | Error ->
+                | Top ->
                     ()
                 | _ -> 
                     ErrorMsg.Error op.Position "Type mismatch"
@@ -339,7 +293,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
                 ((), Int)
             | _ ->
                 ErrorMsg.Error op.Position "Unsupported operation on record"
-                ((), Error)
+                ((), Top)
         | Array (_,lu) ->
             match op.Operator with
             | EqOp
@@ -348,7 +302,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
                 | Array(_,ru ) ->
                     if lu <> ru 
                     then ErrorMsg.Error op.Position "Arrays not of the same type"                                           
-                | Error -> 
+                | Top -> 
                     ()                
                 | _ -> 
                     ErrorMsg.Error op.Position "Type mismatch"            
@@ -356,15 +310,14 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
                 ((), Int)
             | _ ->
                 ErrorMsg.Error op.Position "Unsupported operation on array"
-                ((), Error)
+                ((), Top)
         | Nil ->
             match op.Operator with
             | EqOp
             | NeqOp ->
                 match bareType rightType with
-                | Record _                               
-                | Nil 
-                | Error ->
+                | Record _                                              
+                | Top ->
                     ()
                 | _ -> 
                     ErrorMsg.Error op.Position "Type mismatch"
@@ -372,7 +325,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
                 ((), Int)
             | _ ->
                 ErrorMsg.Error op.Position "Unsupported operation on record"
-                ((), Error)
+                ((), Top)
 
         | String ->
             match op.Operator with
@@ -384,7 +337,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
             | GeOp ->
                 match bareType rightType with
                 | String
-                | Error ->
+                | Top ->
                     ()
                 | _ -> 
                     ErrorMsg.Error op.Position "Type mismatch"
@@ -392,12 +345,12 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
                 ((), Int)
             |_ ->
                 ErrorMsg.Error op.Position "Unsupported operation on string"
-                ((), Error)
+                ((), Top)
     
         | Int ->
             match bareType rightType with
             | Int
-            | Error ->
+            | Top ->
                 ()
             | _ -> 
                 ErrorMsg.Error op.Position "Type mismatch"
@@ -412,7 +365,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
         match typeEnv.TryFind exp.Type with
         | None -> 
             ErrorMsg.Error exp.Position (sprintf "Unknown type %A" exp.Type)
-            ((), Error)
+            ((), Top)
         | Some type' ->
             match bareType type' with
             | Record (fieldList, _) -> 
@@ -432,13 +385,13 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
                 ((), type')
             | _ -> 
                 ErrorMsg.Error exp.Position (sprintf "%A is not a record type" exp.Type)
-                ((), Error)
+                ((), Top)
 
     let translateArrayExp (exp:ArrayExpType) =        
         match typeEnv.TryFind exp.Type with
         | None -> 
             ErrorMsg.Error exp.Position (sprintf "Unknown type %A" exp.Type)
-            ((), Error)
+            ((), Top)
         | Some type' ->
             match bareType type' with
             | Array (elementType, _) -> 
@@ -452,7 +405,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
                 ((), type')
             | _ -> 
                 ErrorMsg.Error exp.Position (sprintf "%A is not an array type" exp.Type)
-                ((), Error)
+                ((), Top)
 
     let translateForExp (exp:ForExpType) =        
         let (lowExp, lowType) = translateExp exp.Low env breakLabel
@@ -506,7 +459,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
             let (elseExp, elseType) = translateExp else' env breakLabel
             if typesMismatch thenType elseType then 
                 ErrorMsg.Error exp.Position (sprintf "Then and else types must match")
-                ((), Error)
+                ((), Top)
             else
                 ((), thenType)
         | None ->
@@ -533,7 +486,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
 
         match type' with
         | Int
-        | Error -> ()
+        | Top -> ()
         | _ -> ErrorMsg.Error pos "Type mismatch"        
         ((), Int)
     | RecordExp recExp ->

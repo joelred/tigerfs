@@ -848,14 +848,15 @@ type TestSemant () =
         (fun () -> compiler.CompileString str) |> should throw typeof<ParseError>
 
     [<Test>]
-    member self.RandomParseError () =
-        let str = @"
-                    let function f(i:int) = if i>0 then (f(i/10);
-                                              print(chr(i-i/10*10+ord(""0""))))
-                       in if i<0 then (print(""-""); f(-i))
-                          else if i>0 then f(i)
-                          else print(""0"")
-                      end"
+    member self.CompareNilNil () =
+        let str = @"/* error: syntax error, nil only matches record types.  */
+                    nil = nil"
+                           
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
+
+    [<Test>]
+    member self.AdditionError () =
+        let str = @"a-b+c"
                            
         (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 

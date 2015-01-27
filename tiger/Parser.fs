@@ -8,10 +8,10 @@ open FParsec.CharParsers
 type UserState = unit
 type Parser<'t> = Parser<'t,UserState>
 
-let mutable trace = true
+let mutable Trace = false
 let (<!>) (p: Parser<_,_>) label : Parser<_,_> =
     fun stream ->
-        if trace then    
+        if Trace then    
             printfn "%A: Entering %s" stream.Position label
             let reply = p stream
             printfn "%A: Leaving %s (%A %A)" stream.Position label reply.Status reply.Result
@@ -238,7 +238,9 @@ let lvalue =
         | (FieldOffset (name,pos))::rest -> buildVar (FieldVar (var, name, pos)) rest
         | (SubscriptOffset (exp, pos))::rest -> buildVar (SubscriptVar(var, exp, pos)) rest
 
-    pipe3 ident getPosition (opt rest)
+    let identWithoutParen = ident .>> notFollowedBy (str "(")
+
+    pipe3 identWithoutParen getPosition (opt rest)
         (fun name pos rest ->
             match rest with
             | None -> SimpleVar (name, pos)
@@ -380,7 +382,7 @@ let factor =
         attempt arrayExpr |>> ArrayExp   <!> "arrayExp";
         attempt recordExpr |>> RecordExp <!> "recordExp";
         attempt assignExpr |>> AssignExp <!> "assignExp";
-        attempt lvalue |>> VarExp        <!> "varExpr";        
+        lvalue |>> VarExp        <!> "varExpr";        
     ]
 
 type MathRhs = Operator * Absyn.Position * Exp 
@@ -392,18 +394,18 @@ let buildExp lhs (op, pos, rhs) =
             Right = rhs;
             Position = pos; }
 
-let binopRhs strOp op = 
-    pipe3 (str strOp >>? getPosition) factor factor'
+
+let binopRhs strOp op p1 p2 = 
+    pipe3 (str strOp >>? getPosition) p1 p2
         (fun pos exp rhs ->
             match rhs with 
             | None -> Some (op, pos, exp)
             | Some e -> Some (op, pos, buildExp exp e))    
     
 do factor'Imp :=
-
     choice [
-        binopRhs "*" MulOp;
-        binopRhs "/" DivOp;
+        binopRhs "*" MulOp factor factor';
+        binopRhs "/" DivOp factor factor';
         preturn None ]
 
 let expBuilder exp exp' =
@@ -417,20 +419,24 @@ let term = expBuilder factor factor'
 
 do term'Imp :=
     choice [
-        binopRhs "+" PlusOp;
-        binopRhs "-" MinusOp;
+        binopRhs "+" PlusOp term term';
+        binopRhs "-" MinusOp term term';
         preturn None]
 
 let arithExp = expBuilder term term'    
 
+let relopRhs strOp op p = 
+    pipe2 (str strOp >>? getPosition) p
+        (fun pos exp -> Some (op, pos, exp))    
+
 let relExp = 
     choice [
-        binopRhs "=" EqOp;
-        binopRhs "<>" NeqOp;
-        binopRhs ">=" GeOp;
-        binopRhs "<=" LeOp;
-        binopRhs "<" LtOp;
-        binopRhs ">" GtOp;
+        relopRhs "=" EqOp arithExp;
+        relopRhs "<>" NeqOp arithExp;
+        relopRhs ">=" GeOp arithExp;
+        relopRhs "<=" LeOp arithExp;
+        relopRhs "<" LtOp arithExp;
+        relopRhs ">" GtOp arithExp;
         
         preturn None
     ]
