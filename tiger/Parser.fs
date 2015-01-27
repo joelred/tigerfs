@@ -8,7 +8,7 @@ open FParsec.CharParsers
 type UserState = unit
 type Parser<'t> = Parser<'t,UserState>
 
-let mutable trace = false
+let mutable trace = true
 let (<!>) (p: Parser<_,_>) label : Parser<_,_> =
     fun stream ->
         if trace then    
@@ -372,11 +372,11 @@ let factor =
         seqExpr |>> SeqExp               <!> "seqExpr";
         attempt callExpr |>> CallExp     <!> "callExpr>";
         uminusExpr |>> NegExp            <!> "negExpr";
-        attempt ifExpr |>> IfExp         <!> "ifExpr";
-        attempt whileExpr |>> WhileExp   <!> "whileExpr";
-        attempt forExpr |>> ForExp       <!> "forExpr";          
+        ifExpr |>> IfExp         <!> "ifExpr";
+        whileExpr |>> WhileExp   <!> "whileExpr";
+        forExpr |>> ForExp       <!> "forExpr";          
         breakExpr |>> BreakExp           <!> "breakExpr";
-        attempt letExpr |>> LetExp       <!> "letExpr";
+        letExpr |>> LetExp               <!> "letExpr";
         attempt arrayExpr |>> ArrayExp   <!> "arrayExp";
         attempt recordExpr |>> RecordExp <!> "recordExp";
         attempt assignExpr |>> AssignExp <!> "assignExp";

@@ -80,6 +80,7 @@ let hasDuplicateNames decs errorMsg=
                 decs
         hasDuplicate
 
+
 let translateType type' (tenv : TypeEnv) =
     match type' with 
     | NameType (sym, pos) -> getTypeByName sym pos tenv
@@ -180,7 +181,11 @@ let rec translateDec dec (env : Env) : Env =
         | None -> 
             (tenv, venv.Add dec.Name (VarEntry { Type = initType; CanAssign = true }))   
 
-    let translateTypeDecs decs =
+    let translateTypeDecs (decs:TypeDecType list) =
+        let pos = match decs with
+                  | a::rest -> a.Position
+                  | [] -> Position ("", 0L, 0L, 0L) // Should never be used
+
         //First make sure decs doesn't contain any duplicate names
         let namepos = List.map (fun (dec : TypeDecType) -> (dec.Name, dec.Position)) decs
         if not <| hasDuplicateNames namepos "Duplicate type name %A found in group" then
@@ -193,7 +198,7 @@ let rec translateDec dec (env : Env) : Env =
 
             // Fill out the actual types
             let augmentedTypeEnv = List.fold addType tenv decs
-        
+            
             let assignType (dec : TypeDecType) =                
                 let alias = 
                     match augmentedTypeEnv.TryFind dec.Name with                
@@ -205,7 +210,27 @@ let rec translateDec dec (env : Env) : Env =
                 alias.Type <- Some type'
 
             List.iter assignType decs
-
+                
+            // Flatten the names and detect cycles
+            let rec resolve type' (path : SymbolNS.Symbol list) : Type =
+                match type' with
+                | Name alias ->     
+                    if List.exists (fun ty -> ty = alias.Name) path then
+                        ErrorMsg.Error pos "Cycle in this group of type definitions"
+                        Error      
+                    else                                          
+                        match alias.Type with   
+                        | Some (Name alias') ->                                                                                                      
+                            let resolvedType = resolve (Name alias') (alias.Name :: path)
+                            alias.Type <- Some resolvedType
+                            resolvedType
+                        | Some knownType -> knownType
+                        | None -> 
+                            ErrorMsg.Impossible "Unknown type when flattening names"
+                | _ -> type'
+                        
+            augmentedTypeEnv.ForEach (fun k ty -> ignore <| resolve ty [])
+        
             (augmentedTypeEnv, venv)
         else
             env

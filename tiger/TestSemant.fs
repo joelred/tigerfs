@@ -1,31 +1,149 @@
-﻿module public Tiger.TestParserAppel
-
-open Absyn
-open Parser
-open FParsec
+﻿module Tiger.TestSemant
 
 open NUnit.Framework
 open FsUnit
-
-let resultType pr = 
-    match pr with    
-    | Success (result,_,_) -> Some 1    
-    | _ -> None
-
-
-let result pr = 
-    match pr with    
-    | Success (result,_,_) -> Some result    
-    | _ -> None
-
-let runToEnd parser str = 
-    run (parser .>> eof) str
+open TigerExceptions
 
 [<TestFixture>]
-type testParserAppel () =
+type TestSemant () =
+  
+    let compiler = new TigerCompiler ()
+
+    [<Test>]
+    member self.testMathStringOperator () =
+        let program = @"""a"" / ""b"""
+
+        (fun () -> compiler.CompileString program) |> should throw typeof<SemanticError>
+      
+    [<Test>]
+    member self.testCompareStringOperator () =
+        compiler.CompileString @"""a"" <= ""b"""
+
+    [<Test>]
+    member self.testEqualityStringOperator () =
+        compiler.CompileString @"""a"" = ""b"""
+    
+    [<Test>]
+    member self.testMathIntOperator () =
+        let program = @"4/ 2"
+
+        compiler.CompileString program
+      
+    [<Test>]
+    member self.testCompareIntOperator () =
+        compiler.CompileString @"2 <= 4"
+
+    [<Test>]
+    member self.testEqualityIntOperator () =
+        compiler.CompileString @"2 = 4"
+
+    [<Test>]
+    member self.testMathArrayOperator () =
+        let program = 
+            @"// Testing
+              let 
+                type arr = array of int
+                var a := arr [10] of 0
+                var b := arr [10] of 1
+              in
+                a + b
+              end"
+
+        (fun () -> compiler.CompileString program) |> should throw typeof<SemanticError>
+
+    [<Test>]
+    member self.testCompareArrayOperator () =
+        let program = 
+            @"// Testing
+              let 
+                type arr = array of int
+                var a := arr [10] of 0
+                var b := arr [10] of 1
+              in
+                a < b
+              end"
+
+        (fun () -> compiler.CompileString program) |> should throw typeof<SemanticError>
+
+    [<Test>]
+    member self.testDifferentArrayOperator () =
+        let program = 
+            @"// Testing
+              let 
+                type arr = array of int
+                type arr2 = array of int
+                var a := arr [10] of 0
+                var b := arr2 [10] of 1
+              in
+                a = b
+              end"
+
+        (fun () -> compiler.CompileString program) |> should throw typeof<SemanticError>
+
+    [<Test>]
+    member self.testEqualArrayOperator () =
+        let program = 
+            @"// Testing
+              let 
+                type arr = array of int
+                type arr2 = array of int
+                var a := arr [10] of 0
+                var b := arr [10] of 1
+              in
+                a <> b
+              end"
+
+        compiler.CompileString program
+
+
+    [<Test>]
+    member self.testMathRecordOperator () =
+        let program = 
+            @"// Testing
+              let 
+                type rec = {Int : int}
+                var a := rec {Int = 0}
+                var b := rec {Int = 1}
+              in
+                a + b
+              end"
+
+        (fun () -> compiler.CompileString program) |> should throw typeof<SemanticError>
+
+    [<Test>]
+    member self.testCompareRecordOperator () =
+        let program = 
+            @"// Testing
+              let 
+               type rec = {Int : int}
+                var a := rec {Int = 0}
+                var b := rec {Int = 1}
+              in
+                a < b
+              end"
+
+        (fun () -> compiler.CompileString program) |> should throw typeof<SemanticError>
+
+
+    [<Test>]
+    member self.testDifferentRecordOperator () =
+        let program = 
+            @"// Testing
+              let 
+                type rec = {Int : int}
+                type rec2 = {Str : string}
+                var a := rec {Int = 0}
+                var b := rec2 {Str = ""a""}
+              in
+                a = b
+              end"
+
+        (fun () -> compiler.CompileString program) |> should throw typeof<SemanticError>
+
+
     [<Test>]
     member self.testArrayLet () =  
-        let str = @"//test1.tig
+        let program = @"//test1.tig
                     /* an array type and an array variable */
                      let
  	                    type  arrtype = array of int
@@ -34,26 +152,23 @@ type testParserAppel () =
 	                    arr1
                      end"
     
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
-       
+        compiler.CompileString program
 
     [<Test>]
     member self.testArrayLet2 () =
-        let str = @"//test2.tig
-                    /* arr1 is valid since expression 0 is int = myint */
-                    let
-	                    type myint = int
-	                    type  arrtype = array of myint
+        let program = @"//test2.tig
+                        /* arr1 is valid since expression 0 is int = myint */
+                        let
+	                        type myint = int
+	                        type  arrtype = array of myint
 
-	                    var arr1:arrtype := arrtype [10] of 0
-                    in
-	                    arr1
-                    end"
+	                        var arr1:arrtype := arrtype [10] of 0
+                        in
+	                        arr1
+                        end"
 
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
-      
+        compiler.CompileString program
+
     [<Test>]
     member self.testRecordLet () =
         let str = @"//test3.tig
@@ -66,8 +181,7 @@ type testParserAppel () =
 	                    rec1
                     end"
 
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        compiler.CompileString str
         
     [<Test>]
     member self.testRecFuncLet () =
@@ -85,8 +199,7 @@ type testParserAppel () =
 	                    nfactor(10)
                     end"
 
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        compiler.CompileString str
     
     [<Test>]
     member self.testRecTypeLet () =
@@ -105,9 +218,8 @@ type testParserAppel () =
 	                    lis
                     end"
 
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
-    
+        compiler.CompileString str
+
     [<Test>]
     member self.testRecProcLet () =
         let str = @"// test6.tig
@@ -124,8 +236,7 @@ type testParserAppel () =
 	                    do_nothing1(0, ""str2"")
                     end"
 
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        compiler.CompileString str
  
     [<Test>]
     member self.testMutuallyRecursiveFunctions () =
@@ -136,15 +247,14 @@ type testParserAppel () =
                     function do_nothing1(a: int, b: string):int=
 		                    (do_nothing2(a+1);0)
 
-                    function do_nothing2(d: int) =
+                    function do_nothing2(d: int):string =
 		                    (do_nothing1(d, ""str"");"" "")
 
                     in
 	                    do_nothing1(0, ""str2"")
                     end"
 
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        compiler.CompileString str
    
     [<Test>]
     member self.testCorrectIf () =
@@ -152,8 +262,7 @@ type testParserAppel () =
                     /* correct if */
                     if (10 > 20) then 30 else 40"
 
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        compiler.CompileString str
     
     [<Test>]
     member self.testInvalidIf () =
@@ -161,8 +270,7 @@ type testParserAppel () =
                     /* error : types of then - else differ */
                     if (5>4) then 13 else  "" "" "
        
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
    
     [<Test>]
     member self.testInvalidWhile () =
@@ -170,8 +278,7 @@ type testParserAppel () =
                     /* error : body of while not unit */
                     while(10 > 5) do 5+6"
        
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
    
     [<Test>]
     member self.testInvalidFor () =
@@ -180,9 +287,8 @@ type testParserAppel () =
                     for i:=10 to "" "" do 
 	                    i := i - 1"
        
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
-   
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
+
     [<Test>]
     member self.testValidFor () =
         let str = @"// test12.tig
@@ -193,8 +299,7 @@ type testParserAppel () =
 	                    for i :=0 to 100 do (a:=a+1;())
                     end"
        
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        compiler.CompileString str
    
     [<Test>]
     member self.compareIncompatibleIntString () =
@@ -203,8 +308,7 @@ type testParserAppel () =
                       Parses but not valid code */
                     3 > ""df"""
        
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
    
     [<Test>]
     member self.compareIncompatibleRecArray () =
@@ -222,8 +326,7 @@ type testParserAppel () =
 	                    if rec <> arr then 3 else 4
                     end"
        
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
    
      [<Test>]
      member self.IfThenNonUnitReturn () =
@@ -231,8 +334,7 @@ type testParserAppel () =
                    /* error : if-then returns non unit */
                     if 20 then 3"
        
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
    
      [<Test>]
      member self.InvalidMutuallyRecursiveTypes () =
@@ -243,14 +345,13 @@ type testParserAppel () =
                     type a=c
                     type b=a
                     type c=d
-                    type d=a
+                    type d=b
 
                     in
                      """"
                     end"
        
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.InvalidRecursiveRecords () =
@@ -266,8 +367,7 @@ type testParserAppel () =
 	                    d
                     end"
        
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.InvalidRecursiveFunctions () =
@@ -286,10 +386,8 @@ type testParserAppel () =
                     in
 	                    do_nothing1(0, ""str2"")
                     end"
-
        
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.InvalidVariableScope () =
@@ -308,9 +406,8 @@ type testParserAppel () =
                     end"
 
        
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
-
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
+    
     [<Test>]
     member self.UndeclaredVar () =
         let str = @"// test20.tig
@@ -318,8 +415,7 @@ type testParserAppel () =
 
                     while 10 > 5 do (i+1;())"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.ProcReturnsValue () =
@@ -337,8 +433,7 @@ type testParserAppel () =
 	                    nfactor(10)
                     end "
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
 
     [<Test>]
@@ -353,8 +448,7 @@ type testParserAppel () =
 	                    rec1.nam := ""asd""
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
 
     [<Test>]
@@ -369,8 +463,7 @@ type testParserAppel () =
 	                    rec1.id := """" 
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.VariableNotArray () =
@@ -382,8 +475,7 @@ type testParserAppel () =
 	                    d[3]
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.VariableNotRecord () =
@@ -395,8 +487,7 @@ type testParserAppel () =
 	                    d.f
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.AddMismatch () =
@@ -405,8 +496,7 @@ type testParserAppel () =
 
                     3 + ""var"""
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.LocalsHideGlobals () =
@@ -420,8 +510,7 @@ type testParserAppel () =
                      g(2)
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        compiler.CompileString str
 
     [<Test>]
     member self.DifferentRecordTypes () =
@@ -436,8 +525,7 @@ type testParserAppel () =
 	                    rec1
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.DifferentArrayTypes () =
@@ -453,8 +541,7 @@ type testParserAppel () =
 	                    arr1
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.Synonyms () =
@@ -469,9 +556,8 @@ type testParserAppel () =
 		                    arr1[2]
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
-
+        compiler.CompileString str
+    
     [<Test>]
     member self.VarDeclInitTypeCompatibility () =
         let str = @"// test31.tig                    
@@ -482,8 +568,7 @@ type testParserAppel () =
 	                    a
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.ExpArrayTypeCompatibility () =
@@ -498,8 +583,7 @@ type testParserAppel () =
 	                    0
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.UnknownType () =
@@ -511,8 +595,7 @@ type testParserAppel () =
 	                    0
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.FunctionParamTypeMismatch () =
@@ -524,8 +607,7 @@ type testParserAppel () =
 	                    g(""one"", ""two"")
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.FunctionParamCountMismatch () =
@@ -537,8 +619,7 @@ type testParserAppel () =
 	                    g(""one"")
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.FunctionParamCountMismatch2 () =
@@ -550,8 +631,7 @@ type testParserAppel () =
 	                    g(3, ""one"", 5)
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.NameHiding () =
@@ -565,8 +645,7 @@ type testParserAppel () =
 	                    0
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        compiler.CompileString str
 
     [<Test>]
     member self.TypeHiding () =
@@ -580,9 +659,8 @@ type testParserAppel () =
                     in
 	                    0
                     end"
-                           
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.FunctionHiding () =
@@ -597,8 +675,7 @@ type testParserAppel () =
 	                    0
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.ProcReturnsValue2 () =
@@ -610,8 +687,7 @@ type testParserAppel () =
 	                    g(2)
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.NestedLetLocalHidesGlobal () =
@@ -626,9 +702,8 @@ type testParserAppel () =
 		                    0
 	                    end
                     end"
-                           
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+
+        compiler.CompileString str
 
     [<Test>]
     member self.CorrectDeclarations () =
@@ -664,8 +739,7 @@ type testParserAppel () =
 
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        compiler.CompileString str
 
     [<Test>]
     member self.UnitIntMismatch () =
@@ -678,8 +752,7 @@ type testParserAppel () =
 	                    a + 3
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.NilTest () =
@@ -696,8 +769,7 @@ type testParserAppel () =
 
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        compiler.CompileString str
 
     [<Test>]
     member self.NilFailTest () =
@@ -711,9 +783,8 @@ type testParserAppel () =
 	                    a
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
-
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
+    
     [<Test>]
     member self.ValidRecordCompare () =
         let str = @"// test46.tig    
@@ -726,8 +797,7 @@ type testParserAppel () =
 	                    b <> nil
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        compiler.CompileString str
     
     [<Test>]
     member self.TypeHiding2 () =
@@ -744,8 +814,7 @@ type testParserAppel () =
 	                    0
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        compiler.CompileString str
 
     [<Test>]
     member self.FunctionHiding2 () =
@@ -762,8 +831,7 @@ type testParserAppel () =
 	                    0
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        compiler.CompileString str
 
     [<Test>]
     member self.NilBeforeTypeId () =
@@ -777,8 +845,19 @@ type testParserAppel () =
 	                    a
                     end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal None
+        (fun () -> compiler.CompileString str) |> should throw typeof<ParseError>
+
+    [<Test>]
+    member self.RandomParseError () =
+        let str = @"
+                    let function f(i:int) = if i>0 then (f(i/10);
+                                              print(chr(i-i/10*10+ord(""0""))))
+                       in if i<0 then (print(""-""); f(-i))
+                          else if i>0 then f(i)
+                          else print(""0"")
+                      end"
+                           
+        (fun () -> compiler.CompileString str) |> should throw typeof<SemanticError>
 
     [<Test>]
     member self.Queens () =
@@ -818,8 +897,7 @@ type testParserAppel () =
                     end
                     "
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
+        compiler.CompileString str
 
     [<Test>]
     member self.Merge () =
@@ -878,9 +956,6 @@ type testParserAppel () =
 
                       /* BODY OF MAIN PROGRAM */
                      in printlist(merge(list1,list2))
-                    end
-                    "
+                    end"
                            
-        let parseResult = run prog str
-        resultType parseResult |> should equal (Some 1)
-
+        compiler.CompileString str

@@ -49,4 +49,8 @@ type internal Table<'a> (map : Map<Symbol, 'a>) =
     
     member t.TryFind k =
         Map.tryFind k map
-        
+    
+    member t.ForEach f =
+        Map.iter f map  
+
+
