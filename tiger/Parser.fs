@@ -490,4 +490,4 @@ do exprImp :=
 
     expr <?> "expression"
 
-let prog = ws >>. expr .>> ws .>> eof
+let prog = ws >>. expr .>> eof

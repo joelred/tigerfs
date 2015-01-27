@@ -58,7 +58,7 @@ let typesMatch l namedR =
 let typesMismatch typ1 typ2 =
     not (typesMatch typ1 typ2)
 
-let getType name pos (tenv: TypeEnv) = 
+let getTypeByName name pos (tenv: TypeEnv) = 
     let type' = tenv.TryFind name
     match type' with
     | Some t ->
@@ -82,21 +82,21 @@ let hasDuplicateNames decs errorMsg=
 
 let translateType type' (tenv : TypeEnv) =
     match type' with 
-    | NameType (sym, pos) -> getType sym pos tenv
+    | NameType (sym, pos) -> getTypeByName sym pos tenv
     | RecordType fieldList ->
-        let unique = Types.nextUnique
+        let unique = Types.nextUnique ()
         let typeList =
             //TODO: Make sure field names are unique
 
             List.map 
                 (fun (field : Field) -> 
-                    let fieldType = getType field.Type field.Position tenv
+                    let fieldType = getTypeByName field.Type field.Position tenv
                     (field.Name, fieldType))                    
                 fieldList
         Record (typeList, unique)
     | ArrayType (baseTypeName, pos) ->
-        let uniquifier = Types.nextUnique
-        let baseType = getType baseTypeName pos tenv
+        let uniquifier = Types.nextUnique ()
+        let baseType = getTypeByName baseTypeName pos tenv
         Array(baseType, uniquifier)  
                            
 let rec translateDec dec (env : Env) : Env =
@@ -111,11 +111,11 @@ let rec translateDec dec (env : Env) : Env =
             let getSignature venv (dec:FunctionDecType) = 
                 let resultType =
                     match dec.Result with
-                    | Some (typeName, pos) -> getType typeName pos tenv                
+                    | Some (typeName, pos) -> getTypeByName typeName pos tenv                
                     | None -> Unit
             
                 let paramTypes = List.map 
-                                    (fun (param:Field) -> getType param.Name param.Position tenv)
+                                    (fun (param:Field) -> getTypeByName param.Type param.Position tenv)
                                     dec.Params
              
                 { Formals = paramTypes; Result = resultType; }
@@ -389,7 +389,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
             ErrorMsg.Error exp.Position (sprintf "Unknown type %A" exp.Type)
             ((), Error)
         | Some type' ->
-            match type' with
+            match bareType type' with
             | Record (fieldList, _) -> 
                 if fieldList.Length = exp.Fields.Length then
                     List.iter2
@@ -415,7 +415,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
             ErrorMsg.Error exp.Position (sprintf "Unknown type %A" exp.Type)
             ((), Error)
         | Some type' ->
-            match type' with
+            match bareType type' with
             | Array (elementType, _) -> 
                 let (sizeExp, sizeType) = translateExp exp.Size env breakLabel
                 let (initExp, initType) = translateExp exp.Init env breakLabel
@@ -536,12 +536,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
 
 let translateProg program =
     let (translated, expType) = translateExp program Environment.BaseEnv None
-
-    // Programs have to return type Int
-    if typesMismatch expType Int then
-        let pos = new Position ("", 0L ,0L, 0L)
-        ErrorMsg.Error pos "Program must have type Int"
-
+    
     if ErrorMsg.HasErrors then
         ErrorMsg.PrintCount
         raise (TigerExceptions.SemanticError "Semantic errors found")

@@ -13,7 +13,8 @@ type ErrorMsg () =
 
     static member Error (pos: FParsec.Position) message =
         errorCount <- errorCount + 1;
-        printfn "%s(%d, %d): Error %s" pos.StreamName pos.Line pos.Column message
+        let msg = sprintf "%s(%d, %d): Error %s\n" pos.StreamName pos.Line pos.Column message
+        printfn "%s" msg
 
         if errorCount > maxErrors then
             ErrorMsg.PrintCount

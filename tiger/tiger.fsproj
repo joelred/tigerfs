@@ -90,7 +90,8 @@
     <Compile Include="Semant.fs" />
     <Compile Include="TestParserAppel.fs" />
     <Compile Include="TestParser.fs" />
-    <Compile Include="TigerC.fs" />
+    <Compile Include="TigerCompiler.fs" />
+    <Compile Include="TestSemant.fs" />
     <None Include="App.config" />
     <None Include="packages.config" />
   </ItemGroup>
@@ -109,7 +110,7 @@
       </PropertyGroup>
     </Otherwise>
   </Choose>
-  <Import Project="$(FSharpTargetsPath)" />  
+  <Import Project="$(FSharpTargetsPath)" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">

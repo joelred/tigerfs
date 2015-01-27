@@ -3,7 +3,7 @@
 type unique = int
 
 let mutable nextVal = 0
-let nextUnique = 
+let nextUnique () = 
     nextVal <- nextVal + 1
     nextVal
 

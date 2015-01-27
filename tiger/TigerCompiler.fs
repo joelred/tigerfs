@@ -20,7 +20,7 @@ type TigerCompiler () =
 
     // Primarily for testing
     member s.CompileString str =
-        let syntax = match runParserOnString Parser.prog () str "" with
+        let syntax = match runParserOnString Parser.prog () "" str with
                      | Success (result,_,_) -> result
                      | Failure (error, _,_) -> 
                         printfn "Parse Error: %s" error
