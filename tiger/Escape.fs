@@ -110,3 +110,4 @@ let FindEscape prog =
         List.fold traverseDec env decs
 
     traverseExp (new EscapeEnv()) 1 prog
+    prog

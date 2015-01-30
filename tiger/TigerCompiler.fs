@@ -3,26 +3,43 @@
 open FParsec
 
 type TigerCompiler () =
-    let mutable dumpSyntaxTree = true
-    
-    let translate syntax =
-        
-        Escape.FindEscape syntax
-        if dumpSyntaxTree then 
+    let mutable dumpSyntaxTree = false
+    let mutable dumpDesugaredTree = false
+    let mutable dumpHIR = false
+
+    let dumpSyntax doIt tree =
+        if doIt then 
             printfn "*** Syntax start"
-            PrintAbsyn.print syntax
+            PrintAbsyn.print tree
             printfn "***  Syntax End"
 
-        let ir = 
-            Semant.transProg syntax
-        ()
 
+    let translate syntax =
+        syntax 
+            |> Escape.FindEscape
+            |> dumpSyntax dumpSyntaxTree
+            
+       
+        ()
     
     member public s.DumpSyntaxTree 
         with get() =
             dumpSyntaxTree
         and set value =
             dumpSyntaxTree <- value
+
+    member public s.DumpDesugaredTree 
+        with get() =
+            dumpDesugaredTree
+        and set value =
+            dumpDesugaredTree <- value
+
+    member public s.DumpHIRTree 
+        with get() =
+            dumpDesugaredTree
+        and set value =
+            dumpDesugaredTree <- value
+
 
     // Primarily for testing
     member s.CompileString str =
