@@ -6,8 +6,10 @@ type TigerCompiler () =
     let mutable dumpSyntaxTree = false
     
     let translate syntax =
-        if dumpSyntaxTree then printf "%A" syntax
-
+        if dumpSyntaxTree then 
+            printfn "*** Syntax start"
+            PrintAbsyn.print syntax
+            printfn "***  Syntax End"
         let ir = Semant.transProg syntax
         ()
 

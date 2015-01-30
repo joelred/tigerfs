@@ -1,6 +1,6 @@
 ﻿module internal Tiger.Parser
 
-open SymbolNS
+open Symbols
 open Absyn
 open FParsec
 open FParsec.CharParsers

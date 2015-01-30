@@ -1,4 +1,4 @@
-﻿module internal Tiger.ErrorMsgNS
+﻿module internal Tiger.ErrorMsgs
 
 type ErrorMsg () =
    

@@ -1,6 +1,6 @@
 ﻿module internal Tiger.Absyn
 
-open SymbolNS
+open Symbols
 
 /// Position within the file
 type internal Position = FParsec.Position

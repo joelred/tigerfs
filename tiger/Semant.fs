@@ -2,7 +2,8 @@
 
 open Absyn
 open Environment
-open ErrorMsgNS
+open ErrorMsgs
+open Translate
 open Types
 
 type ExpTy = Translate.Exp * Types.Type
@@ -49,10 +50,10 @@ let translateType type' (tenv : TypeEnv) =
         let baseType = getTypeByName baseTypeName pos tenv
         Array(baseType, uniquifier)  
                            
-let rec translateDec dec (env : Env) : Env =
+let rec translateDec (env : Env) level dec: Env =
     let (tenv, venv) = env
 
-    let rec translateFunctionDecs (decs : FunctionDecType list)  =
+    let rec translateFunctionDecs level (decs : FunctionDecType list)  =
         //First make sure decs doesn't contain any duplicate names
         let namepos = List.map (fun (dec : FunctionDecType) -> (dec.Name, dec.Position)) decs
         if not <| hasDuplicateNames namepos "Duplicate function name %A found in group" then
@@ -68,7 +69,18 @@ let rec translateDec dec (env : Env) : Env =
                                     (fun (param:Field) -> getTypeByName param.Type param.Position tenv)
                                     dec.Params
              
-                { Formals = paramTypes; Result = resultType; }
+                // Create new level for function
+                let formalEscapes = 
+                    List.map 
+                        (fun (var : Field) -> var.Escape)
+                        dec.Params
+
+                let label = new Temps.Label (dec.Name.Name)
+
+                {  Level = Translate.NewLevel level label formalEscapes;
+                   Label = label; 
+                   Formals = paramTypes; 
+                   Result = resultType; }
        
             /// Updated environment with all the function signatures
             let functionsVarEnv = 
@@ -93,16 +105,24 @@ let rec translateDec dec (env : Env) : Env =
                     | _ -> 
                         // We just inserted these in functionsEnv, so it better be there
                         ErrorMsg.Impossible "Compiler error: Unknown function %A" func.Name
+                
+                let funcLevel = funEntry.Level
+                
                 // Insert the parameters into the namespace
                 let functionVenv =
                     List.fold2 
                         (fun (venv:VarEnv) (field: Field) type' -> 
-                            venv.Add field.Name (VarEntry {Type = type'; CanAssign = true}) )
+                            venv.Add 
+                                field.Name 
+                                (VarEntry 
+                                    {Access = AllocateLocal funcLevel field.Escape
+                                     Type = type'; 
+                                     CanAssign = true}) )
                         functionsVarEnv
                         func.Params
                         funEntry.Formals
             
-                let (bodyExp, bodyType) = translateExp func.Body (tenv, functionVenv) None
+                let (bodyExp, bodyType) = translateExp (tenv, functionVenv) None level func.Body
 
                 if typesMismatch bodyType funEntry.Result then
                     ErrorMsg.Error func.Position "Body type doesn't match declared type"
@@ -112,8 +132,8 @@ let rec translateDec dec (env : Env) : Env =
         else
             (tenv,venv)
 
-    let translateVarDec dec =
-        let (initExp, initType) = translateExp dec.Init env None
+    let translateVarDec level dec =
+        let (initExp, initType) = translateExp env None level dec.Init
         match dec.Type with
         | Some (declaredTypeName,pos) ->
             let declaredType = tenv.TryFind declaredTypeName
@@ -121,19 +141,34 @@ let rec translateDec dec (env : Env) : Env =
             | Some type' ->
                 if typesMismatch type' initType then
                     ErrorMsg.Error dec.Position "Declared type must match initializer"
-                    (tenv, venv.Add dec.Name (VarEntry { Type = Top; CanAssign = true }))
+                    (tenv, venv.Add dec.Name (VarEntry 
+                                                { Access = AllocateLocal level dec.Escape;
+                                                  Type = Top; 
+                                                  CanAssign = true }))
                 else
-                    (tenv, venv.Add dec.Name (VarEntry { Type = type'; CanAssign = true }))                
+                    (tenv, venv.Add dec.Name (VarEntry
+                                                 { Access = AllocateLocal level dec.Escape;
+                                                   Type = type';
+                                                   CanAssign = true }))                
             | None ->                
                 ErrorMsg.Error dec.Position (sprintf "Declared type %A does not exist" declaredTypeName)
-                (tenv, venv.Add dec.Name (VarEntry { Type = Top; CanAssign = true }))   
+                (tenv, venv.Add dec.Name (VarEntry 
+                                            { Access = AllocateLocal level dec.Escape;
+                                              Type = Top; 
+                                              CanAssign = true }))   
         | None -> 
             match initType with
             | Nil -> 
                 ErrorMsg.Error dec.Position ("Cannot assign nil to unknown type")
-                (tenv, venv.Add dec.Name (VarEntry { Type = Top; CanAssign = true }))
+                (tenv, venv.Add dec.Name (VarEntry
+                                             { Access = AllocateLocal level dec.Escape;
+                                               Type = Top; 
+                                               CanAssign = true }))
             | _ ->
-                (tenv, venv.Add dec.Name (VarEntry { Type = initType; CanAssign = true }))   
+                (tenv, venv.Add dec.Name (VarEntry 
+                                             { Access = AllocateLocal level dec.Escape;
+                                               Type = initType;
+                                               CanAssign = true }))   
 
     let translateTypeDecs (decs:TypeDecType list) =
         let pos = match decs with
@@ -166,7 +201,7 @@ let rec translateDec dec (env : Env) : Env =
             List.iter assignType decs
                 
             // Flatten the names and detect cycles
-            let rec resolve type' (path : SymbolNS.Symbol list) : Type =
+            let rec resolve type' (path : Symbols.Symbol list) : Type =
                 match type' with
                 | Name alias ->     
                     if List.exists (fun ty -> ty = alias.Name) path then
@@ -191,15 +226,15 @@ let rec translateDec dec (env : Env) : Env =
 
     match dec with 
     | FunctionDec decs ->
-        translateFunctionDecs decs       
+        translateFunctionDecs level decs       
     | VarDec var ->
-        translateVarDec var
+        translateVarDec level var
     | TypeDec decs ->
         translateTypeDecs decs
 
-and translateDecs decs env =
+and translateDecs env level decs =
     List.fold 
-        (fun env dec -> translateDec dec env)
+        (fun env dec -> translateDec env level dec)
         env
         decs
 
@@ -244,7 +279,7 @@ and translateVar var (env : Env) =
             ErrorMsg.Error pos "Attempt to subscript in non-array type"
             ((), Top, true)
 
-and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
+and translateExp (env : Env) (breakLabel : bool option) level exp : ExpTy =
     let (typeEnv, varEnv) = env
     
     let translateCall call (env : Env) =
@@ -255,7 +290,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
             if( f.Formals.Length = call.Args.Length ) then
                 List.iter2 
                     (fun expectedType receivedExp ->
-                        let (_, receivedType) = translateExp receivedExp env None
+                        let (_, receivedType) = translateExp env None level receivedExp
                         if typesMismatch receivedType expectedType then
                             ErrorMsg.Error call.Position (sprintf "Type mismatch in arguments to %A" call.Func) )
                     f.Formals
@@ -270,8 +305,8 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
             ((), Top)
 
     let translateOperator op (env : Env) =        
-        let (leftExp, leftType) = translateExp op.Left env breakLabel
-        let (rightExp, rightType) = translateExp op.Right env breakLabel
+        let (leftExp, leftType) = translateExp env breakLabel level op.Left 
+        let (rightExp, rightType) = translateExp env breakLabel level op.Right 
       
         match bareType leftType with
         | Top -> 
@@ -373,7 +408,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
                     List.iter2
                         (fun (expectedName, expectedType) (name, value, pos) ->
                             if expectedName = name then
-                                let (trexp, type') = translateExp value env breakLabel
+                                let (trexp, type') = translateExp env breakLabel level value 
                                 if typesMismatch type' expectedType then
                                     ErrorMsg.Error pos "Type mismatch"                                
                             else
@@ -395,8 +430,8 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
         | Some type' ->
             match bareType type' with
             | Array (elementType, _) -> 
-                let (sizeExp, sizeType) = translateExp exp.Size env breakLabel
-                let (initExp, initType) = translateExp exp.Init env breakLabel
+                let (sizeExp, sizeType) = translateExp env breakLabel level exp.Size 
+                let (initExp, initType) = translateExp env breakLabel level exp.Init 
                 if typesMismatch sizeType Int then
                    ErrorMsg.Error exp.Position "Size must be an integer"
                 else if typesMismatch initType elementType then
@@ -408,24 +443,27 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
                 ((), Top)
 
     let translateForExp (exp:ForExpType) =        
-        let (lowExp, lowType) = translateExp exp.Low env breakLabel
-        let (highExp, highType) = translateExp exp.High env breakLabel
+        let (lowExp, lowType) = translateExp env breakLabel level exp.Low 
+        let (highExp, highType) = translateExp env breakLabel level exp.High 
 
         if typesMismatch lowType Int || typesMismatch highType Int then
             ErrorMsg.Error exp.Position "Bounds of for expression must be integers"
-
-        let forVarEntry = VarEntry { Type = Int; CanAssign = false; }
+        
+        let forVarEntry = VarEntry 
+                            { Access = Translate.AllocateLocal level exp.Escape; 
+                              Type = Int;
+                              CanAssign = false; }
     
         let augmentedEnv = (typeEnv, varEnv.Add exp.Var forVarEntry)    
-        let (bodyExp, bodyType) = translateExp exp.Body augmentedEnv (Some true)
+        let (bodyExp, bodyType) = translateExp augmentedEnv (Some true) level exp.Body 
         if typesMismatch bodyType Unit then
             ErrorMsg.Error exp.Position "Body of for expression must not yield a value"
 
         ((), Unit)
 
     let translateWhileExp (exp:WhileExpType) =
-        let (testExp, testType) = translateExp exp.Test env breakLabel
-        let (bodyExp, bodyType) = translateExp exp.Body env (Some true)
+        let (testExp, testType) = translateExp env breakLabel level exp.Test 
+        let (bodyExp, bodyType) = translateExp env (Some true) level exp.Body 
 
         if typesMismatch testType Int then
             ErrorMsg.Error exp.Position "Test must have type Int"
@@ -438,7 +476,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
     let translateAssignExp (exp:AssignExpType) =
         //TODO: translateVar should return the trexp 
         let _, varType, canAssign = translateVar exp.Var env
-        let (rhsExp, rhsType) = translateExp exp.Exp env breakLabel
+        let (rhsExp, rhsType) = translateExp env breakLabel level exp.Exp 
 
         if not canAssign then
             ErrorMsg.Error exp.Position "Cannot assign to variable"
@@ -450,13 +488,13 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
 
     let translateIfExp (exp:IfExpType) =
         let (typeEnv, varEnv) = env
-        let (testExp, testType) = translateExp exp.Test env breakLabel
-        let (thenExp, thenType) = translateExp exp.Then' env breakLabel
+        let (testExp, testType) = translateExp env breakLabel level exp.Test 
+        let (thenExp, thenType) = translateExp env breakLabel level exp.Then' 
     
         if typesMismatch testType Int then  ErrorMsg.Error exp.Position "Test must evaluate to an integer" 
         match exp.Else' with
         | Some else' -> 
-            let (elseExp, elseType) = translateExp else' env breakLabel
+            let (elseExp, elseType) = translateExp env breakLabel level else' 
             if typesMismatch thenType elseType then 
                 ErrorMsg.Error exp.Position (sprintf "Then and else types must match")
                 ((), Top)
@@ -482,7 +520,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
     | OpExp op ->
         translateOperator op env
     | NegExp (exp, pos) ->
-        let (trexp, type') = translateExp exp env breakLabel
+        let (trexp, type') = translateExp env breakLabel level exp 
 
         match type' with
         | Int
@@ -494,7 +532,7 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
     | ArrayExp arrExp ->
         translateArrayExp arrExp
     | SeqExp lst ->                
-        List.fold (fun acc (exp, pos) -> translateExp exp env breakLabel) ((), Unit) lst
+        List.fold (fun acc (exp, pos) -> translateExp env breakLabel level exp) ((), Unit) lst
     | AssignExp exp ->
         translateAssignExp exp
     | IfExp exp ->
@@ -509,11 +547,13 @@ and translateExp exp (env : Env) (breakLabel : bool option) : ExpTy =
         | None -> ErrorMsg.Error pos "Break must be enclosed in a loop"
         ((), Unit)
     | LetExp exp ->
-        let updatedEnv = translateDecs exp.Decs env
-        translateExp exp.Body updatedEnv breakLabel
+        let updatedEnv = translateDecs env level exp.Decs
+        translateExp updatedEnv breakLabel level exp.Body
 
 let translateProg program =
-    let (translated, expType) = translateExp program Environment.BaseEnv None
+    let mainLevel = NewLevel Outermost (new Temps.Label ("t_main")) []
+
+    let (translated, expType) = translateExp Environment.BaseEnv None mainLevel program
     
     if ErrorMsg.HasErrors then
         ErrorMsg.PrintCount

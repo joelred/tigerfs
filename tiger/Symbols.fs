@@ -1,4 +1,4 @@
-﻿module internal Tiger.SymbolNS
+﻿module internal Tiger.Symbols
 
 open System.Collections.Generic
 
@@ -40,12 +40,12 @@ type internal Symbol( name: string, idCode: int ) =
 
 
 
-type internal Table<'a> (map : Map<Symbol, 'a>) =
+type internal SymbolTable<'a> (map : Map<Symbol, 'a>) =
     
-    static member empty = Table(Map.empty)
+    static member empty = SymbolTable(Map.empty)
 
     member t.Add k v =
-         Table(Map.add k v map)
+         SymbolTable(Map.add k v map)
     
     member t.TryFind k =
         Map.tryFind k map

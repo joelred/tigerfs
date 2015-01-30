@@ -9,12 +9,12 @@ let nextUnique () =
 
 type Alias =
     { 
-        Name : SymbolNS.Symbol;
+        Name : Symbols.Symbol;
         mutable Type: Type option }
 
 and Type =
     | Array of Type * unique
-    | Record of (SymbolNS.Symbol * Type) list * unique
+    | Record of (Symbols.Symbol * Type) list * unique
     | Nil
     | Int
     | String
