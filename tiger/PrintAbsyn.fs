@@ -5,6 +5,7 @@ open Absyn
 
 let print (exp:Exp) =
     let rec indent i = 
+        printf "  "
         match i with
         | 0 -> ()
         | n -> indent (n-1)

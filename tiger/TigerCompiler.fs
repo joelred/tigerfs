@@ -3,14 +3,18 @@
 open FParsec
 
 type TigerCompiler () =
-    let mutable dumpSyntaxTree = false
+    let mutable dumpSyntaxTree = true
     
     let translate syntax =
+        
+        Escape.FindEscape syntax
         if dumpSyntaxTree then 
             printfn "*** Syntax start"
             PrintAbsyn.print syntax
             printfn "***  Syntax End"
-        let ir = Semant.transProg syntax
+
+        let ir = 
+            Semant.transProg syntax
         ()
 
     

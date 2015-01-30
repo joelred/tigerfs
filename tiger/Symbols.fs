@@ -42,7 +42,7 @@ type internal Symbol( name: string, idCode: int ) =
 
 type internal SymbolTable<'a> (map : Map<Symbol, 'a>) =
     
-    static member empty = SymbolTable(Map.empty)
+    new () = SymbolTable<'a> (Map.empty)
 
     member t.Add k v =
          SymbolTable(Map.add k v map)

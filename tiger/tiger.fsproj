@@ -90,6 +90,7 @@
     <Compile Include="Frames.fs" />
     <Compile Include="Translate.fs" />
     <Compile Include="Environment.fs" />
+    <Compile Include="Escape.fs" />
     <Compile Include="Semant.fs" />
     <Compile Include="TestParserAppel.fs" />
     <Compile Include="TestParser.fs" />
